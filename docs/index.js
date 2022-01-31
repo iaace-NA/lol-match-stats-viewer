@@ -192,6 +192,9 @@ loadJSON(match_url).then(match_data => {
                 else if (p.stats[prop_name] === false) {
                     classes = "bool-false";
                 }
+                else if (p.stats[prop_name] === null || p.stats[prop_name] === undefined) {
+                    return cellText("");
+                }
                 return cellText(p.stats[prop_name], classes);
             }).join("")}</tr>`;
         }).join("")}</table>`
