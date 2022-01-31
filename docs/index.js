@@ -81,6 +81,7 @@ const exclude_stat_name = [
     "item4",
     "item5",
     "item6",
+    "participantId"
 ];
 const stat_name_translation = {
 
