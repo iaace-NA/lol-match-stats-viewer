@@ -151,7 +151,7 @@ class Match {
 					goldEarned: participant.stats.goldEarned,
 					goldSpent: participant.stats.goldSpent,
 					individualPosition: participant.stats.lane,
-					inhibitorKills: null,
+					inhibitorKills: participant.stats.inhibitorKills,
 					inhibitorTakedowns: null,
 					inhibitorsLost: null,
 					item0: participant.stats.item0,
