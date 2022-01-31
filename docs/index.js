@@ -112,8 +112,8 @@ loadJSON(match_url).then(match_data => {
     Promise.all([
         loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
         loadJSON(match_timeline_url),
-        loadJSON(`http://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
-        loadJSON(`http://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
+        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
+        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
     ]).then(responses => {
         console.log(responses);
         champion_data = responses[0];
