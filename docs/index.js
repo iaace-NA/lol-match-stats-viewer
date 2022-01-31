@@ -2,8 +2,8 @@
 let match_url = undefined;
 let match_timeline_url = undefined;
 if (getParameterByName("example")) {
-    match_url = "example-data/match/2808045821.json";
-    match_timeline_url = "example-data/timeline/2808045821.json";
+    match_url = "example-data/match/3733629150.json";
+    match_timeline_url = "example-data/timeline/3733629150.json";
 }
 else {
     match_url = getParameterByName("match");
@@ -83,28 +83,54 @@ const exclude_stat_name = [
     "item6",
 ];
 const stat_name_translation = {
-    
+
 };
-loadJSON(`https://ddragon.leagueoflegends.com/api/versions.json`).then(versions => {
+const regions = {
+    "BR1": "BR",
+    "EUN1": "EUNE",
+    "EUW1": "EUW",
+    "JP1": "JP",
+    "KR": "KR",
+    "LA1": "LAN",
+    "LA2": "LAS",
+    "NA1": "NA",
+    "OC1": "OCE",
+    "TR1": "TR",
+    "RU": "RU"
+};
+let addv;
+let spell_data;
+let champion_data;
+let rune_data;
+loadJSON(match_url).then(match_data => {
+    let match = new Match(champion_data, match_data, null, true);
+    const major_patch = match.gameVersion.substring(0, match.gameVersion.indexOf(".", match.gameVersion.indexOf(".") + 1));
+    addv = major_patch + ".1";//active ddragon version
+    $("metadata").innerHTML = `<h1>${queues[match.queueId]}</h1>
+    <p>${new Date(match.gameCreation).toLocaleDateString()} ${new Date(match.gameCreation).toLocaleTimeString()}</p>
+    <p>Region: ${escapeHtml(regions[match.platformId])}, Patch ${escapeHtml(major_patch)}, Duration: ${standardTimestamp(match.gameDuration)}</p>`;
     Promise.all([
-        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${versions[0]}/data/en_US/champion.json`),
-        loadJSON(match_url),
+        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
         loadJSON(match_timeline_url),
+        loadJSON(`http://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
+        loadJSON(`http://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
     ]).then(responses => {
         console.log(responses);
-        const champions = responses[0];
-        const match_data = responses[1];
-        const timeline_data = responses[2];
-        let match = new Match(champions, match_data, timeline_data, true);
+        champion_data = responses[0];
+        const timeline_data = responses[1];
+        spell_data = responses[2];
+        rune_data = responses[3];
+        match = new Match(champion_data, match_data, timeline_data, true);
         console.log(match);
         let teams = match.teams.map((team, team_index) => {
-            //____, ______, ______, Level, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
-            //Rune, Spell1, Spell2, Level, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
-            return `<table><tr>
+            //____, ______, ______, Level, _____, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
+            //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
+            return `<tr>
             ${headerText("Rune")}
             ${headerText("Spell 1")}
             ${headerText("Spell 2")}
             ${headerText("Level")}
+            ${headerText("Champion")}
             ${headerText(`Team ${team_index + 1}`)}
             ${headerText()}
             ${headerText()}
@@ -119,24 +145,26 @@ loadJSON(`https://ddragon.leagueoflegends.com/api/versions.json`).then(versions 
             </tr>${match.participants.map(p => {
                 if (p.teamId != team.teamId) return "";
                 let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
-                return `<tr>
-                ${cellText(p.stats.perkPrimaryStyle)}
-                ${cellText(p.spell1Id)}
-                ${cellText(p.spell2Id)}
+                return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
+                <td>${runeIDtoImg(p.stats.perk0)}</td>
+                <td>${spellIDtoImg(p.spell1Id)}</td>
+                <td>${spellIDtoImg(p.spell2Id)}</td>
                 ${cellText(p.stats.champLevel)}
+                <td>${championIDtoImg(p.championId)}</td>
                 ${cellText(pI.player.summonerName)}
-                ${cellText(p.stats.item0)}
-                ${cellText(p.stats.item1)}
-                ${cellText(p.stats.item2)}
-                ${cellText(p.stats.item3)}
-                ${cellText(p.stats.item4)}
-                ${cellText(p.stats.item5)}
-                ${cellText(p.stats.item6)}
+                <td>${itemIDtoImg(p.stats.item0)}</td>
+                <td>${itemIDtoImg(p.stats.item1)}</td>
+                <td>${itemIDtoImg(p.stats.item2)}</td>
+                <td>${itemIDtoImg(p.stats.item3)}</td>
+                <td>${itemIDtoImg(p.stats.item4)}</td>
+                <td>${itemIDtoImg(p.stats.item5)}</td>
+                <td>${itemIDtoImg(p.stats.item6)}</td>
                 ${cellText(`${p.stats.kills} / ${p.stats.deaths} / ${p.stats.assists}`)}
                 ${cellText(p.stats.neutralMinionsKilled + p.stats.totalMinionsKilled)}
                 ${cellText(p.stats.goldEarned)}</tr>`;
-            }).join("")}</table>`;
-        }).join("");
+            }).join("")}`;
+        }).join("<tr><td>&nbsp;</td></tr>");
+        teams = "<table>" + teams + "</table>";
         $("scoreboard").innerHTML = teams;
         let participant_stat_props = [];
         for (let participant_id in match.participants) {
@@ -146,12 +174,21 @@ loadJSON(`https://ddragon.leagueoflegends.com/api/versions.json`).then(versions 
                 }
             }
         }
-        let stats = `<table><tr>${headerText("summonerName")}${match.participants.map(p => {
+        let stats = `<table class="table table-striped mt-5"><tr>${headerText("summonerName")}${match.participants.map(p => {
             let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
             return headerText(pI.player.summonerName);
         }).join("")}</tr>
         ${participant_stat_props.map(prop_name => {
-            return `<tr>${headerText(prop_name)}${match.participants.map(p => cellText(p.stats[prop_name])).join("")}</tr>`;
+            return `<tr>${headerText(prop_name)}${match.participants.map(p => {
+                let classes = "";
+                if (p.stats[prop_name] === true) {
+                    classes = "bool-true";
+                }
+                else if (p.stats[prop_name] === false) {
+                    classes = "bool-false";
+                }
+                return cellText(p.stats[prop_name], classes);
+            }).join("")}</tr>`;
         }).join("")}</table>`
         $("player-stats").innerHTML = stats;
     }).catch(handleError);
@@ -162,8 +199,8 @@ loadJSON("example-data/match/2808045821.json").then(data => {
     console.log("Response successful!");
 }).catch(handleError);
 
-function cellText(text = "") {
-    return `<td>${escapeHtml(text)}</td>`;
+function cellText(text = "", classes = "") {
+    return `<td${classes == "" ? "" : ` class="${escapeHtml(classes)}"`}>${escapeHtml(text)}</td>`;
 }
 function headerText(text = "") {
     return `<th>${escapeHtml(text)}</th>`;
@@ -208,4 +245,58 @@ function escapeHtml(unsafe) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+function championIDtoImg(id, img_class = "champion-img") {
+    for (let b in champion_data.data) {
+        if (champion_data.data[b].key == id) {
+            return `<img${img_class == "" ? "" : ` class=${escapeHtml(img_class)}`} src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/champion/${encodeURIComponent(b)}.png">`;
+        }
+    }
+    return "";
+}
+
+function itemIDtoImg(id, img_class = "item-img") {
+    if (id == 0) return ``;
+    return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/item/${encodeURIComponent(id)}.png">`;
+}
+
+function spellIDtoImg(id, img_class = "spell-img") {
+    for (let b in spell_data.data) {
+        if (spell_data.data[b].key == id) {
+            return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/spell/${encodeURIComponent(spell_data.data[b].id)}.png">`;
+        }
+    }
+    return "";
+}
+
+function runeIDtoImg(id, img_class = "rune-img") {
+    for (let b in rune_data) {
+        if (rune_data[b].id == id) {
+            return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/img/${rune_data[b].icon}">`;
+        }
+        for (let c in rune_data[b].slots) {
+            for (let d in rune_data[b].slots[c].runes) {
+                if (rune_data[b].slots[c].runes[d].id == id) {
+                    return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/img/${rune_data[b].slots[c].runes[d].icon}">`;
+                }
+            }
+        }
+    }
+    return "";
+}
+
+function standardTimestamp(sec) {
+	let mins = Math.floor(parseInt(sec) / 60);
+	let hours = Math.floor(parseInt(mins) / 60);
+	let days = Math.floor(parseInt(hours) / 24);
+	mins = mins % 60;
+	hours = hours % 24;
+	let secs = Math.floor(parseInt(sec) % 60);
+	if (secs < 10) secs = "0" + secs;
+	if (mins < 10) mins = "0" + mins;
+	if (hours < 10) hours = "0" + hours;
+	if (hours == "00" && days == 0) return `${mins}m:${secs}s`;
+	else if (days == 0) return `${hours}h:${mins}m:${secs}s`;
+	else return `${days}d:${hours}h:${mins}m:${secs}s`;
 }

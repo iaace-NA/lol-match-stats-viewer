@@ -1,0 +1,52 @@
+img.champion-img {
+    width: 40px;
+    height: 40px;
+    margin: 0px;
+    padding: 0px;
+    vertical-align: bottom;
+}
+
+img.item-img {
+    width: 32px;
+    height: 32px;
+    margin: 2px;
+    padding: 0px;
+    display: inline;
+    outline: 1px solid black;
+}
+
+img.spell-img {
+    width: 32px;
+    height: 32px;
+    margin: 2px;
+    padding: 0px;
+    display: inline;
+    outline: 1px solid black;
+}
+
+img.rune-img {
+    width: 24px;
+    height: 24px;
+    margin: 2px;
+    padding: 0px;
+    display: inline;
+}
+
+table {
+    width: 100%;
+}
+
+.match-victory {
+    background-color: rgba(64, 128, 255, 0.2);
+}
+
+.match-defeat {
+    background-color: rgba(255, 64, 64, 0.2);
+}
+
+.bool-true {
+    background-color: rgba(64, 128, 255, 0.2)!important;
+}
+.bool-false {
+    background-color: rgba(255, 64, 64, 0.2)!important;
+}
