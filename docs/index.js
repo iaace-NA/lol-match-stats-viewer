@@ -125,7 +125,7 @@ loadJSON(match_url).then(match_data => {
         let teams = match.teams.map((team, team_index) => {
             //____, ______, ______, Level, _____, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
             //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
-            return `<tr>
+            return `<thead class="sticky"><tr>
             ${headerText("Rune")}
             ${headerText("Spell 1")}
             ${headerText("Spell 2")}
@@ -142,7 +142,7 @@ loadJSON(match_url).then(match_data => {
             ${headerText("K / D / A")}
             ${headerText("CS")}
             ${headerText("Gold")}
-            </tr>${match.participants.map(p => {
+            </tr></thead>${match.participants.map(p => {
                 if (p.teamId != team.teamId) return "";
                 let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
                 return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
@@ -164,7 +164,7 @@ loadJSON(match_url).then(match_data => {
                 ${cellText(p.stats.goldEarned)}</tr>`;
             }).join("")}`;
         }).join("<tr><td>&nbsp;</td></tr>");
-        teams = "<table>" + teams + "</table>";
+        teams = "<table class=\"table\">" + teams + "</table>";
         $("scoreboard").innerHTML = teams;
         let participant_stat_props = [];
         for (let participant_id in match.participants) {
@@ -174,10 +174,15 @@ loadJSON(match_url).then(match_data => {
                 }
             }
         }
-        let stats = `<table class="table table-striped mt-5"><tr>${headerText("summonerName")}${match.participants.map(p => {
+        let stats = `<table class="table table-striped mt-5"><thead class="sticky">
+        <tr>${headerText("Summoner Name")}${match.participants.map(p => {
             let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
             return headerText(pI.player.summonerName);
         }).join("")}</tr>
+        <tr>${headerText("Champion")}${match.participants.map(p => {
+            return `<th>${championIDtoImg(p.championId)}</th>`;
+        }).join("")}</tr>
+        </thead>
         ${participant_stat_props.map(prop_name => {
             return `<tr>${headerText(prop_name)}${match.participants.map(p => {
                 let classes = "";

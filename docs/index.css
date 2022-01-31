@@ -50,3 +50,8 @@ table {
 .bool-false {
     background-color: rgba(255, 64, 64, 0.2)!important;
 }
+.sticky {
+    position: sticky;
+    top: 0px;
+    background-color: #fff;
+}
