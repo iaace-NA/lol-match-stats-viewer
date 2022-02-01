@@ -9,6 +9,7 @@ class Match {
 	*/
 	constructor(MATCH_CHAMPIONS, m, mt = null, json = false) {
 		function matchFindChampion(id, name) {
+			if (!MATCH_CHAMPIONS) return id;
 			for (let b in MATCH_CHAMPIONS.data) {
 				if (id == MATCH_CHAMPIONS.data[b].key) {
 					return id;
