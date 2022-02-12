@@ -6,13 +6,14 @@ img.champion-img {
     vertical-align: bottom;
 }
 
-img.item-img {
+.item-img {
     width: 32px;
     height: 32px;
     margin: 2px;
     padding: 0px;
-    display: inline;
+    display: inline-block;
     outline: 1px solid black;
+    vertical-align: middle;
 }
 
 img.spell-img {
@@ -25,8 +26,8 @@ img.spell-img {
 }
 
 img.rune-img {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     margin: 2px;
     padding: 0px;
     display: inline;
@@ -54,4 +55,16 @@ table {
     position: sticky;
     top: 0px;
     background-color: #fff;
+}
+table td {
+    text-align: right;
+}
+table th {
+    text-align: right;
+}
+.tal {
+    text-align: left;
+}
+.tar {
+    text-align: right;
 }

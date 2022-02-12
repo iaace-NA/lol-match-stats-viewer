@@ -86,6 +86,16 @@ const exclude_stat_name = [
 const stat_name_translation = {
 
 };
+const stat_value_override = {
+    "perk0": runeToCell,
+    "perk1": runeToCell,
+    "perk2": runeToCell,
+    "perk3": runeToCell,
+    "perk4": runeToCell,
+    "perk5": runeToCell,
+    "perkPrimaryStyle": runeToCell,
+    "perkSubStyle": runeToCell,
+};
 const regions = {
     "BR1": "BR",
     "EUN1": "EUNE",
@@ -128,18 +138,11 @@ loadJSON(match_url).then(match_data => {
             //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
             return `<thead class="sticky"><tr>
             ${headerText("Rune")}
-            ${headerText("Spell 1")}
-            ${headerText("Spell 2")}
+            ${headerText("Spells")}
             ${headerText("Level")}
             ${headerText("Champion")}
             ${headerText(`Team ${team_index + 1}`)}
-            ${headerText()}
-            ${headerText()}
-            ${headerText()}
-            ${headerText()}
-            ${headerText()}
-            ${headerText()}
-            ${headerText()}
+            ${headerText("Items", "tal")}
             ${headerText("K / D / A")}
             ${headerText("CS")}
             ${headerText("Gold")}
@@ -148,18 +151,17 @@ loadJSON(match_url).then(match_data => {
                 let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
                 return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
                 <td>${runeIDtoImg(p.stats.perk0)}</td>
-                <td>${spellIDtoImg(p.spell1Id)}</td>
-                <td>${spellIDtoImg(p.spell2Id)}</td>
+                <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
                 ${cellText(p.stats.champLevel)}
                 <td>${championIDtoImg(p.championId)}</td>
                 ${cellText(pI.player.summonerName)}
-                <td>${itemIDtoImg(p.stats.item0)}</td>
-                <td>${itemIDtoImg(p.stats.item1)}</td>
-                <td>${itemIDtoImg(p.stats.item2)}</td>
-                <td>${itemIDtoImg(p.stats.item3)}</td>
-                <td>${itemIDtoImg(p.stats.item4)}</td>
-                <td>${itemIDtoImg(p.stats.item5)}</td>
-                <td>${itemIDtoImg(p.stats.item6)}</td>
+                <td class="tal">${itemIDtoImg(p.stats.item0)}
+                ${itemIDtoImg(p.stats.item1)}
+                ${itemIDtoImg(p.stats.item2)}
+                ${itemIDtoImg(p.stats.item3)}
+                ${itemIDtoImg(p.stats.item4)}
+                ${itemIDtoImg(p.stats.item5)}
+                ${itemIDtoImg(p.stats.item6, "item-img ms-5")}</td>
                 ${cellText(`${p.stats.kills} / ${p.stats.deaths} / ${p.stats.assists}`)}
                 ${cellText(p.stats.neutralMinionsKilled + p.stats.totalMinionsKilled)}
                 ${cellText(p.stats.goldEarned)}</tr>`;
@@ -185,7 +187,7 @@ loadJSON(match_url).then(match_data => {
         }).join("")}</tr>
         </thead>
         ${participant_stat_props.map(prop_name => {
-            return `<tr>${headerText(prop_name)}${match.participants.map(p => {
+            return `<tr>${headerText(prop_name, "tal")}${match.participants.map(p => {
                 let classes = "";
                 if (p.stats[prop_name] === true) {
                     classes = "bool-true";
@@ -196,7 +198,12 @@ loadJSON(match_url).then(match_data => {
                 else if (p.stats[prop_name] === null || p.stats[prop_name] === undefined) {
                     return cellText("");
                 }
-                return cellText(p.stats[prop_name], classes);
+                if (stat_value_override[prop_name]) {
+                    return stat_value_override[prop_name](p.stats[prop_name]);
+                }
+                else {
+                    return cellText(p.stats[prop_name], classes);
+                }
             }).join("")}</tr>`;
         }).join("")}</table>`
         $("player-stats").innerHTML = stats;
@@ -208,11 +215,17 @@ loadJSON("example-data/match/2808045821.json").then(data => {
     console.log("Response successful!");
 }).catch(handleError);
 
+function runeToCell(id) {
+    return cellUnsafe(runeIDtoImg(id));
+}
+function cellUnsafe(text = "", classes = "") {
+    return `<td${classes == "" ? "" : ` class="${escapeHtml(classes)}"`}>${text}</td>`;
+}
 function cellText(text = "", classes = "") {
     return `<td${classes == "" ? "" : ` class="${escapeHtml(classes)}"`}>${escapeHtml(text)}</td>`;
 }
-function headerText(text = "") {
-    return `<th>${escapeHtml(text)}</th>`;
+function headerText(text = "", classes = "") {
+    return `<th${classes == "" ? "" : ` class="${escapeHtml(classes)}"`}>${escapeHtml(text)}</th>`;
 }
 
 function $(id) {
@@ -266,7 +279,7 @@ function championIDtoImg(id, img_class = "champion-img") {
 }
 
 function itemIDtoImg(id, img_class = "item-img") {
-    if (id == 0) return ``;
+    if (id == 0) return `<div class="${img_class}">&nbsp;</div>`;
     return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/item/${encodeURIComponent(id)}.png">`;
 }
 
