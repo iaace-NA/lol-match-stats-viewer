@@ -79,6 +79,9 @@ table th {
     text-align: center;
 }
 
+
+/* From https://loading.io/css/ */
+
 .lds-spinner {
     color: official;
     display: inline-block;
