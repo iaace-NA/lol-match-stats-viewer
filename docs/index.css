@@ -75,6 +75,10 @@ table th {
     text-align: right;
 }
 
+.tac {
+    text-align: center;
+}
+
 .lds-spinner {
     color: official;
     display: inline-block;
