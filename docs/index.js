@@ -4,8 +4,7 @@ let match_timeline_url = undefined;
 if (getParameterByName("example")) {
     match_url = "example-data/match/3733629150.json";
     match_timeline_url = "example-data/timeline/3733629150.json";
-}
-else {
+} else {
     match_url = getParameterByName("match");
     match_timeline_url = getParameterByName("timeline");
 }
@@ -25,12 +24,12 @@ const queues = {
     "317": "CS Definitely Not Dominion",
     "325": "SR All Random",
     "400": "SR Draft",
-    "420": "SR Ranked Solo",//ranked
+    "420": "SR Ranked Solo", //ranked
     "430": "SR Blind",
-    "440": "SR Ranked Flex",//ranked
+    "440": "SR Ranked Flex", //ranked
     "450": "HA ARAM",
     "460": "TT Blind",
-    "470": "TT Ranked Flex",//ranked
+    "470": "TT Ranked Flex", //ranked
     "600": "SR Blood Hunt",
     "610": "CR Dark Star: Singularity",
     "700": "SR Clash",
@@ -114,33 +113,34 @@ let spell_data;
 let champion_data;
 let rune_data;
 loadJSON(match_url).then(match_data => {
-    let match = new Match(champion_data, match_data, null, true);
-    const major_patch = match.gameVersion.substring(0, match.gameVersion.indexOf(".", match.gameVersion.indexOf(".") + 1));
-    addv = major_patch + ".1";//active ddragon version
-    $("metadata").innerHTML = `<h1>${queues[match.queueId]}</h1>
+            let match = new Match(champion_data, match_data, null, true);
+            const major_patch = match.gameVersion.substring(0, match.gameVersion.indexOf(".", match.gameVersion.indexOf(".") + 1));
+            addv = major_patch + ".1"; //active ddragon version
+            $("metadata").innerHTML = `<h1>${queues[match.queueId]}</h1>
     <p class="m-1">${new Date(match.gameCreation).toLocaleDateString()} ${new Date(match.gameCreation).toLocaleTimeString()}</p>
     <p class="m-1">Region: ${escapeHtml(regions[match.platformId])}, Match ID: ${escapeHtml(match.gameId)}, Patch ${escapeHtml(major_patch)}, Duration: ${standardTimestamp(match.gameDuration)}</p>`;
-    Promise.all([
-        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
-        loadJSON(match_timeline_url),
-        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
-        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
-    ]).then(responses => {
-        console.log(responses);
-        champion_data = responses[0];
-        const timeline_data = responses[1];
-        spell_data = responses[2];
-        rune_data = responses[3];
-        match = new Match(champion_data, match_data, timeline_data, true);
-        console.log(match);
-        let teams = match.teams.map((team, team_index) => {
-            //____, ______, ______, Level, _____, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
-            //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
-            return `<thead class="sticky"><tr>
+            Promise.all([
+                    loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
+                    loadJSON(match_timeline_url),
+                    loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
+                    loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
+                ]).then(responses => {
+                        console.log(responses);
+                        champion_data = responses[0];
+                        const timeline_data = responses[1];
+                        spell_data = responses[2];
+                        rune_data = responses[3];
+                        match = new Match(champion_data, match_data, timeline_data, true);
+                        console.log(match);
+                        let teams = match.teams.map((team, team_index) => {
+                                    //____, ______, ______, Level, _____, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
+                                    //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
+                                    console.log(team.bans);
+                                    return `<thead class="sticky"><tr>
             ${headerText("Rune")}
             ${headerText("Spells")}
             ${headerText("Level")}
-            ${headerText("Champion")}
+            <th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
             ${headerText(`Team ${team_index + 1}`)}
             ${headerText("Items", "tal")}
             ${headerText("K / D / A")}
@@ -210,11 +210,6 @@ loadJSON(match_url).then(match_data => {
     }).catch(handleError);
 }).catch(handleError);
 
-loadJSON("example-data/match/2808045821.json").then(data => {
-    console.log(data);
-    console.log("Response successful!");
-}).catch(handleError);
-
 function runeToCell(id) {
     return cellUnsafe(runeIDtoImg(id));
 }
@@ -275,7 +270,7 @@ function championIDtoImg(id, img_class = "champion-img") {
             return `<img${img_class == "" ? "" : ` class=${escapeHtml(img_class)}`} src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/champion/${encodeURIComponent(b)}.png">`;
         }
     }
-    return "";
+    return `<div class="${img_class}">&nbsp;</div>`;
 }
 
 function itemIDtoImg(id, img_class = "item-img") {
