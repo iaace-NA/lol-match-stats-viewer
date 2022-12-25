@@ -568,6 +568,8 @@ class Match {
 					spell4Casts: participant.spell4Casts,
 					summoner1Casts: participant.summoner1Casts,
 					summoner2Casts: participant.summoner2Casts,
+					totalDamageShieldedOnTeammates: participant.totalDamageShieldedOnTeammates,
+					totalHealsOnTeammates: participant.totalHealsOnTeammates,
 				},
 				timeline: {
 					participantId: participant.participantId,
