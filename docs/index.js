@@ -2,8 +2,8 @@
 let match_url = undefined;
 let match_timeline_url = undefined;
 if (getParameterByName("example")) {
-    match_url = "example-data/match/3733629150.json";
-    match_timeline_url = "example-data/timeline/3733629150.json";
+    match_url = "example-data/match/v5.json";
+    match_timeline_url = "example-data/timeline/v5.json";
 } else {
     match_url = getParameterByName("match");
     match_timeline_url = getParameterByName("timeline");
