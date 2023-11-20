@@ -581,19 +581,40 @@ class Match {
 		});
 
 		this.cache.participantIdentities = this.m.participants.map(participant => {
-			return {
-				participantId: participant.participantId,
-				player: {
-					platformId: this.m.platformId,
-					accountId: null,
-					summonerName: participant.summonerName,
-					summonerId: participant.summonerId,
-					currentPlatformId: this.m.platformId,
-					currentAccountId: null,
-					matchHistoryUri: null,
-					profileIcon: participant.profileIcon,
-				}
-			};
+			if (typeof(participant.riotIdName) === "string" && participant.riotIdName.length > 0) {
+				return {
+					participantId: participant.participantId,
+					player: {
+						platformId: this.m.platformId,
+						accountId: null,
+						summonerName: `${participant.riotIdName}#${participant.riotIdTagline}`,
+						summonerId: participant.summonerId,
+						currentPlatformId: this.m.platformId,
+						currentAccountId: null,
+						matchHistoryUri: null,
+						profileIcon: participant.profileIcon,
+						riotIdName: participant.riotIdName,
+						riotIdTagline: participant.riotIdTagline,
+					}
+				};
+			}
+			else {
+				return {
+					participantId: participant.participantId,
+					player: {
+						platformId: this.m.platformId,
+						accountId: null,
+						summonerName: participant.summonerName,
+						summonerId: participant.summonerId,
+						currentPlatformId: this.m.platformId,
+						currentAccountId: null,
+						matchHistoryUri: null,
+						profileIcon: participant.profileIcon,
+						riotIdName: participant.riotIdName,
+						riotIdTagline: participant.riotIdTagline,
+					}
+				};;
+			}
 		});
 
 		if (this.mtValid) {
