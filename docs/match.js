@@ -241,6 +241,7 @@ class Match {
 					puuid: null,
 					quadraKills: participant.stats.quadraKills,
 					riotIdName: null,
+					riotIdGameName: null,
 					riotIdTagline: null,
 					role: participant.timeline.role,
 					sightWardsBoughtInGame: participant.stats.sightWardsBoughtInGame,
@@ -581,19 +582,19 @@ class Match {
 		});
 
 		this.cache.participantIdentities = this.m.participants.map(participant => {
-			if (typeof(participant.riotIdName) === "string" && participant.riotIdName.length > 0) {
+			if (typeof(participant.riotIdGameName) === "string" && participant.riotIdGameName.length > 0) {
 				return {
 					participantId: participant.participantId,
 					player: {
 						platformId: this.m.platformId,
 						accountId: null,
-						summonerName: `${participant.riotIdName}#${participant.riotIdTagline}`,
+						summonerName: `${participant.riotIdGameName}#${participant.riotIdTagline}`,
 						summonerId: participant.summonerId,
 						currentPlatformId: this.m.platformId,
 						currentAccountId: null,
 						matchHistoryUri: null,
 						profileIcon: participant.profileIcon,
-						riotIdName: participant.riotIdName,
+						riotIdGameName: participant.riotIdGameName,
 						riotIdTagline: participant.riotIdTagline,
 					}
 				};
@@ -610,7 +611,7 @@ class Match {
 						currentAccountId: null,
 						matchHistoryUri: null,
 						profileIcon: participant.profileIcon,
-						riotIdName: participant.riotIdName,
+						riotIdGameName: participant.riotIdGameName,
 						riotIdTagline: participant.riotIdTagline,
 					}
 				};;
