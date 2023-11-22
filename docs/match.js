@@ -86,7 +86,7 @@ class Match {
 			for (let team of this.m_raw.teams) {
 				let team_kills = 0;
 				for (let c in this.m_raw.participants) {
-					if (this.m_raw.participants[c].teamId == team.teamId) {
+					if (this.m_raw.participants[c].teamId == team.teamId && this.m_raw.participants[c].stats) {
 						team_kills += this.m_raw.participants[c].stats.kills;
 					}
 				}
@@ -596,6 +596,7 @@ class Match {
 						profileIcon: participant.profileIcon,
 						riotIdGameName: participant.riotIdGameName,
 						riotIdTagline: participant.riotIdTagline,
+						puuid: participant.puuid
 					}
 				};
 			}
@@ -613,6 +614,7 @@ class Match {
 						profileIcon: participant.profileIcon,
 						riotIdGameName: participant.riotIdGameName,
 						riotIdTagline: participant.riotIdTagline,
+						puuid: participant.puuid
 					}
 				};;
 			}
