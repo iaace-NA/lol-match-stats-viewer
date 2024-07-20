@@ -62,6 +62,7 @@ const queues = {
     "1200": "NB Nexus Blitz",
     "1300": "NB Nexus Blitz",
     "1400": "SR Ultimate Spellbook",
+    "1810": "FC Swarm",
     "2000": "SR Tutorial 1",
     "2010": "SR Tutorial 2",
     "2020": "SR Tutorial 3"
