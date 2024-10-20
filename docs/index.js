@@ -33,8 +33,20 @@ const exclude_stat_name = [
     "participantId"
 ];
 const stat_name_translation = {
-
+    "longestTimeSpentLiving": "Longest Time Spent Living (seconds)",
+    "spell1Casts": "Q Ability Casts",
+    "spell2Casts": "W Ability Casts",
+    "spell3Casts": "E Ability Casts",
+    "spell4Casts": "R Ability Casts",
+    "summoner1Casts": "D Summoner Casts",
+    "summoner2Casts": "F Summoner Casts"
 };
+function camelToTitleCase(str) {
+    // Insert a space before all capital letters
+    let result = str.replace(/([A-Z])/g, ' $1');
+    // Capitalize the first letter and return the modified string
+    return result.charAt(0).toUpperCase() + result.slice(1);
+  }
 const stat_value_override = {
     "perk0": runeToCell,
     "perk1": runeToCell,
@@ -144,7 +156,11 @@ loadJSON(match_url).then(match_data => {
         }).join("")}</tr>
         </thead>
         ${participant_stat_props.map(prop_name => {
-            return `<tr>${headerText(prop_name, "tal")}${match.participants.map(p => {
+            let remapped_prop_name = camelToTitleCase(prop_name);
+            if (stat_name_translation[prop_name]) {
+                remapped_prop_name = stat_name_translation[prop_name];
+            }
+            return `<tr>${headerText(remapped_prop_name, "tal")}${match.participants.map(p => {
                 let classes = "";
                 if (p.stats[prop_name] === true) {
                     classes = "bool-true";
