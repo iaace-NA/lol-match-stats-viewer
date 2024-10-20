@@ -1,7 +1,12 @@
 "use strict";
 let match_url = undefined;
 let match_timeline_url = undefined;
-if (getParameterByName("example")) {
+const example_param = getParameterByName("example")
+if (example_param == "4") {
+    match_url = "example-data/match/2808045821.json";
+    match_timeline_url = "example-data/timeline/2808045821.json";
+}
+else if (example_param) {
     match_url = "example-data/match/v5.json";
     match_timeline_url = "example-data/timeline/v5.json";
 } else {
