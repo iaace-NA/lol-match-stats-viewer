@@ -8,68 +8,10 @@ if (getParameterByName("example")) {
     match_url = getParameterByName("match");
     match_timeline_url = getParameterByName("timeline");
 }
-const queues = {
-    "0": "Custom",
-    "70": "SR One for All",
-    "72": "HA 1v1 Snowdown Showdown",
-    "73": "HA 2v2 Snowdown Showdown",
-    "75": "SR 6v6 Hexakill",
-    "76": "SR URF",
-    "78": "HA One For All: Mirror",
-    "83": "SR Co-op vs AI URF",
-    "98": "TT 6v6 Hexakill",
-    "100": "BB 5v5 ARAM",
-    "310": "SR Nemesis",
-    "313": "SR Black Market Brawlers",
-    "317": "CS Definitely Not Dominion",
-    "325": "SR All Random",
-    "400": "SR Draft",
-    "420": "SR Ranked Solo", //ranked
-    "430": "SR Blind",
-    "440": "SR Ranked Flex", //ranked
-    "450": "HA ARAM",
-    "460": "TT Blind",
-    "470": "TT Ranked Flex", //ranked
-    "600": "SR Blood Hunt",
-    "610": "CR Dark Star: Singularity",
-    "700": "SR Clash",
-    "720": "HA Clash",
-    "800": "TT Co-op vs AI Intermediate",
-    "810": "TT Co-op vs AI Intro",
-    "820": "TT Co-op vs AI Beginner",
-    "830": "SR Co-op vs AI Intro",
-    "840": "SR Co-op vs AI Beginner",
-    "850": "SR Co-op vs AI Intermediate",
-    "870": "SR Co-op vs AI New: Intro",
-    "880": "SR Co-op vs AI New: Beginner",
-    "890": "SR Co-op vs AI New: Intermediate",
-    "900": "SR ARURF",
-    "910": "CS Ascension",
-    "920": "HA Legend of the Poro King",
-    "940": "SR Nexus Siege",
-    "950": "SR Doom Bots Voting",
-    "960": "SR Doom Bots Standard",
-    "980": "VP Star Guardian Invasion: Normal",
-    "990": "VP Star Guardian Invasion: Onslaught",
-    "1000": "OC Project: Hunters",
-    "1010": "SR Snow ARURF",
-    "1020": "SR One for All",
-    "1030": "OE Intro",
-    "1040": "OE Cadet",
-    "1050": "OE Crewmember",
-    "1060": "OE Captain",
-    "1070": "OE Onslaught",
-    "1200": "NB Nexus Blitz",
-    "1300": "NB Nexus Blitz",
-    "1400": "SR Ultimate Spellbook",
-    "1810": "FC Swarm (1 Player)",
-    "1810": "FC Swarm (2 Players)",
-    "1810": "FC Swarm (3 Players)",
-    "1810": "FC Swarm (4 Players)",
-    "2000": "SR Tutorial 1",
-    "2010": "SR Tutorial 2",
-    "2020": "SR Tutorial 3"
-};
+const queues = {};
+for (let queue of QUEUE_GROUPS) {
+    queues[queue.id] = queue.name;
+}
 const exclude_stat_name = [
     "playerScore0",
     "playerScore1",
