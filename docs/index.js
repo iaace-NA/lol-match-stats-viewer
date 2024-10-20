@@ -114,7 +114,14 @@ const regions = {
     "NA1": "NA",
     "OC1": "OCE",
     "TR1": "TR",
-    "RU": "RU"
+    "RU": "RU",
+    "PBE1": "PBE",
+    "PH2": "PH",
+    "SG2": "SG",
+    "TH2": "TH",
+    "TW2": "TW",
+    "VN2": "VN",
+    "ME1": "ME"
 };
 let addv;
 let spell_data;
