@@ -110,7 +110,7 @@ loadJSON(match_url).then(match_data => {
             ${headerText("Spells")}
             ${headerText("Level")}
             <th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
-            ${headerText(`Team ${team_index + 1}`)}
+            ${headerText(`Team ${team_index + 1} (${team.win})`)}
             ${headerText("Items", "tal")}
             ${headerText("K / D / A")}
             ${headerText("CS")}
