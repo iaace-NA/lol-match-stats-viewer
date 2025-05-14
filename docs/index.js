@@ -46,12 +46,28 @@ const stat_name_translation = {
     "summoner1Casts": "D Summoner Casts",
     "summoner2Casts": "F Summoner Casts"
 };
+
+// Stats that should be prioritized in the dropdown for the graph
+const prioritized_stats = [
+    "kills", "deaths", "assists", "totalDamageDealtToChampions",
+    "goldEarned", "visionScore", "totalMinionsKilled", "wardsPlaced",
+    "turretKills", "totalHeal", "damageDealtToObjectives"
+];
+
+// Stats that work well in graph format
+const graphable_stats = [
+    ...prioritized_stats,
+    "magicDamageDealtToChampions", "physicalDamageDealtToChampions", "trueDamageDealtToChampions",
+    "totalDamageTaken", "damageDealtToTurrets", "timeCCingOthers", "totalTimeCrowdControlDealt",
+    "neutralMinionsKilled", "wardsKilled", "spell1Casts", "spell2Casts", "spell3Casts", "spell4Casts"
+];
+
 function camelToTitleCase(str) {
     // Insert a space before all capital letters
     let result = str.replace(/([A-Z])/g, ' $1');
     // Capitalize the first letter and return the modified string
     return result.charAt(0).toUpperCase() + result.slice(1);
-  }
+}
 const stat_value_override = {
     "perk0": runeToCell,
     "perk1": runeToCell,
@@ -99,18 +115,18 @@ loadJSON(match_url).then(match_data => {
         loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
         loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
     ]).then(responses => {
-            console.log(responses);
-            champion_data = responses[0];
-            const timeline_data = responses[1];
-            spell_data = responses[2];
-            rune_data = responses[3];
-            match = new Match(champion_data, match_data, timeline_data, true);
-            console.log(match);
-            let teams = match.teams.map((team, team_index) => {
-                //____, ______, ______, Level, _____, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
-                //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
-                console.log(team.bans);
-                return `<thead class="sticky"><tr>
+        console.log(responses);
+        champion_data = responses[0];
+        const timeline_data = responses[1];
+        spell_data = responses[2];
+        rune_data = responses[3];
+        match = new Match(champion_data, match_data, timeline_data, true);
+        console.log(match);
+        let teams = match.teams.map((team, team_index) => {
+            //____, ______, ______, Level, _____, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
+            //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
+            console.log(team.bans);
+            return `<thead class="sticky"><tr>
             ${headerText("Rune")}
             ${headerText("Spells")}
             ${headerText("Level")}
@@ -121,9 +137,9 @@ loadJSON(match_url).then(match_data => {
             ${headerText("CS")}
             ${headerText("Gold")}
             </tr></thead>${match.participants.map(p => {
-            if (p.teamId != team.teamId) return "";
-            let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
-            return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
+                if (p.teamId != team.teamId) return "";
+                let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
+                return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
             <td>${runeIDtoImg(p.stats.perk0)}</td>
             <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
             ${cellText(p.stats.champLevel)}
@@ -139,7 +155,7 @@ loadJSON(match_url).then(match_data => {
             ${cellText(`${p.stats.kills} / ${p.stats.deaths} / ${p.stats.assists}`)}
             ${cellText(p.stats.neutralMinionsKilled + p.stats.totalMinionsKilled)}
             ${cellText(p.stats.goldEarned)}</tr>`;
-        }).join("")}`;
+            }).join("")}`;
         }).join("<tr><td>&nbsp;</td></tr>");
         teams = "<table class=\"table\">" + teams + "</table>";
         $("scoreboard").innerHTML = teams;
@@ -185,6 +201,28 @@ loadJSON(match_url).then(match_data => {
             }).join("")}</tr>`;
         }).join("")}</table>`
         $("player-stats").innerHTML = stats;
+
+        // Initialize the stats graph functionality
+        populateStatSelector(match);
+
+        // Hide the graph container initially until user selects a stat
+        $("stats-graph").style.height = "0px";
+
+        // Add event listener for stat selection to show the graph
+        $("stat-selector").addEventListener('change', function () {
+            const selectedStat = this.value;
+            if (selectedStat) {
+                createStatsGraph(match, selectedStat);
+            }
+        });
+
+        // Add event listener for chart type selection to update the graph
+        $("chart-type-selector").addEventListener('change', function () {
+            const selectedStat = $("stat-selector").value;
+            if (selectedStat) {
+                createStatsGraph(match, selectedStat);
+            }
+        });
     }).catch(handleError);
 }).catch(handleError);
 
@@ -289,16 +327,228 @@ function runeIDtoImg(id, img_class = "rune-img") {
 }
 
 function standardTimestamp(sec) {
-	let mins = Math.floor(parseInt(sec) / 60);
-	let hours = Math.floor(parseInt(mins) / 60);
-	let days = Math.floor(parseInt(hours) / 24);
-	mins = mins % 60;
-	hours = hours % 24;
-	let secs = Math.floor(parseInt(sec) % 60);
-	if (secs < 10) secs = "0" + secs;
-	if (mins < 10) mins = "0" + mins;
-	if (hours < 10) hours = "0" + hours;
-	if (hours == "00" && days == 0) return `${mins}m:${secs}s`;
-	else if (days == 0) return `${hours}h:${mins}m:${secs}s`;
-	else return `${days}d:${hours}h:${mins}m:${secs}s`;
+    let mins = Math.floor(parseInt(sec) / 60);
+    let hours = Math.floor(parseInt(mins) / 60);
+    let days = Math.floor(parseInt(hours) / 24);
+    mins = mins % 60;
+    hours = hours % 24;
+    let secs = Math.floor(parseInt(sec) % 60);
+    if (secs < 10) secs = "0" + secs;
+    if (mins < 10) mins = "0" + mins;
+    if (hours < 10) hours = "0" + hours;
+    if (hours == "00" && days == 0) return `${mins}m:${secs}s`;
+    else if (days == 0) return `${hours}h:${mins}m:${secs}s`;
+    else return `${days}d:${hours}h:${mins}m:${secs}s`;
+}
+
+// Function to populate the stat selector dropdown
+function populateStatSelector(match) {
+    const statSelector = $("stat-selector");
+
+    // Create a list of all available stats for graphing
+    const availableStats = new Set();
+
+    // Add prioritized stats first
+    for (const statName of prioritized_stats) {
+        if (match.participants[0].stats[statName] !== undefined) {
+            availableStats.add(statName);
+        }
+    }
+
+    // Add other graphable stats
+    for (const statName of graphable_stats) {
+        if (!availableStats.has(statName) && match.participants[0].stats[statName] !== undefined) {
+            availableStats.add(statName);
+        }
+    }
+
+    // Add all remaining numeric stats that aren't in the exclude list
+    for (const participant of match.participants) {
+        for (const statName in participant.stats) {
+            if (!exclude_stat_name.includes(statName) &&
+                !availableStats.has(statName) &&
+                typeof participant.stats[statName] === 'number') {
+                availableStats.add(statName);
+            }
+        }
+    }
+
+    // Clear existing options and add new ones
+    statSelector.innerHTML = '<option value="" disabled selected>Select a stat to display</option>';
+
+    // Add options to the dropdown
+    for (const statName of availableStats) {
+        const option = document.createElement('option');
+        option.value = statName;
+
+        // Use translated stat name if available
+        if (stat_name_translation[statName]) {
+            option.textContent = stat_name_translation[statName];
+        } else {
+            option.textContent = camelToTitleCase(statName);
+        }
+
+        statSelector.appendChild(option);
+    }
+
+    // Add event listener for stat selection
+    statSelector.addEventListener('change', function () {
+        const selectedStat = this.value;
+        if (selectedStat) {
+            createStatsGraph(match, selectedStat);
+        }
+    });
+}
+
+// Function to create the stats bar graph using Plotly
+function createStatsGraph(match, statName) {
+    const graphContainer = $("stats-graph");
+    const chartType = $("chart-type-selector").value;
+    const isHorizontal = chartType === "horizontal";
+
+    // Prepare data for the graph
+    const teams = [[], []]; // Team 0 and Team 1
+    const teamColors = ['rgba(64, 128, 255, 0.7)', 'rgba(255, 64, 64, 0.7)']; // Blue/Red team colors
+    const teamBorderColors = ['rgba(64, 128, 255, 1)', 'rgba(255, 64, 64, 1)'];
+
+    // Get data for each participant
+    const participantNames = [];
+    const participantValues = [];
+    const participantColors = [];
+    const participantBorderColors = [];
+    const champImages = [];
+    const champNames = [];
+    const champLabels = []; // Add array for champion labels with player names
+
+    // For horizontal charts, sort participants so blue team appears above red team
+    const sortedParticipants = [...match.participants];
+
+    // When in horizontal mode, sort so that blue team (100) comes before red team (200)
+    if (isHorizontal) {
+        sortedParticipants.sort((a, b) => a.teamId - b.teamId);
+    }
+
+    sortedParticipants.forEach(participant => {
+        const teamIndex = participant.teamId === 100 ? 0 : 1; // 100 is blue team, 200 is red team
+        const playerIdentity = match.participantIdentities.find(pI => pI.participantId === participant.participantId);
+        const playerName = playerIdentity ? playerIdentity.player.summonerName : `Player ${participant.participantId}`;
+        const statValue = participant.stats[statName] || 0;
+
+        participantNames.push(playerName);
+        participantValues.push(statValue);
+        participantColors.push(teamColors[teamIndex]);
+        participantBorderColors.push(teamBorderColors[teamIndex]);
+
+        // Get champion image and name
+        for (let champKey in champion_data.data) {
+            if (champion_data.data[champKey].key == participant.championId) {
+                champImages.push(`${champKey}`);
+                champNames.push(champion_data.data[champKey].name);
+                // Create champion label with player name - unified for both horizontal and vertical charts
+                champLabels.push(`${champion_data.data[champKey].name} (${playerName})`);
+                break;
+            }
+        }
+    });
+
+    // Get the display name for the stat
+    let statDisplayName = statName;
+    if (stat_name_translation[statName]) {
+        statDisplayName = stat_name_translation[statName];
+    } else {
+        statDisplayName = camelToTitleCase(statName);
+    }
+
+    // Create the Plotly bar chart
+    const data = [{
+        type: 'bar',
+        // If horizontal, swap x and y
+        x: isHorizontal ? participantValues : champImages,
+        y: isHorizontal ? champImages : participantValues,
+        text: participantValues.map(val => val.toLocaleString()),
+        textposition: 'auto',
+        orientation: isHorizontal ? 'h' : 'v', // Set orientation based on chart type
+        marker: {
+            color: participantColors,
+            line: {
+                color: participantBorderColors,
+                width: 1.5
+            }
+        },
+        hoverinfo: 'text',
+        hovertext: participantNames.map((name, i) => {
+            return `<b>${name}</b><br>${champNames[i]}<br>${statDisplayName}: ${participantValues[i].toLocaleString()}`;
+        })
+    }];
+
+    // Set up the layout for the graph
+    const layout = {
+        title: statDisplayName,
+        // Configure axes based on orientation
+        xaxis: isHorizontal ? {
+            title: statDisplayName
+        } : {
+            title: 'Champions',
+            tickangle: 0,
+            tickmode: 'array',
+            tickvals: champImages,
+            // Use consistent labels for vertical charts too
+            ticktext: champLabels,
+            tickfont: {
+                size: 9
+            },
+            tickangle: 45 // Angle text for readability
+        },
+        yaxis: isHorizontal ? {
+            title: 'Champions',
+            tickmode: 'array',
+            tickvals: champImages,
+            ticktext: champLabels,
+            tickfont: {
+                size: 10
+            }
+        } : {
+            title: statDisplayName
+        },
+        margin: {
+            l: isHorizontal ? 150 : 50,
+            r: 50,
+            b: isHorizontal ? 50 : 170, // Increase bottom margin to fit angled labels in vertical mode
+            t: 50,
+            pad: 4
+        },
+        // Adjust champion images based on orientation
+        images: champImages.map((champKey, i) => ({
+            source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
+            x: isHorizontal ? -0.15 : i / (champImages.length - 1),
+            y: isHorizontal ? i / (champImages.length - 1) : -0.15,
+            xref: 'paper',
+            yref: 'paper',
+            sizex: 0.06,
+            sizey: 0.06,
+            xanchor: isHorizontal ? 'right' : 'center',
+            yanchor: isHorizontal ? 'middle' : 'top'
+        })),
+        height: 600,
+        bargap: 0.15,
+        barmode: 'group'
+    };
+
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        toImageButtonOptions: {
+            format: 'png',
+            filename: `LoL_Stats_${statName}`,
+            height: 500,
+            width: 700,
+            scale: 2
+        }
+    };
+
+    Plotly.newPlot(graphContainer, data, layout, config);
+
+    // Update the height of the graph container
+    $("stats-graph").style.height = "600px";  // Match the container height
 }

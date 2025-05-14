@@ -37,6 +37,29 @@
         </div>
     </div>
     <div id="timeline-info"></div>
+
+    <div id="stats-graph-container" class="mt-5 mb-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3>Match Statistics</h3>
+                        <div class="d-flex gap-3">
+                            <select id="chart-type-selector" class="form-select" style="width: 150px;">
+                                <option value="vertical" selected>Vertical Bars</option>
+                                <option value="horizontal">Horizontal Bars</option>
+                            </select>
+                            <select id="stat-selector" class="form-select" style="width: 300px;">
+                                <option value="" disabled selected>Select a stat to display</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="stats-graph" style="width: 100%; height: 600px;"></div>
+        </div>
+    </div>
+
     <div id="player-stats"></div>
     <p style="text-align: center;">iaace © 2022&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://github.com/iaace-NA/lol-match-stats-viewer" target="_blank">Source Code</a><br><br>This website isn’t endorsed by Riot Games and doesn’t reflect the views or opinions of Riot Games or anyone officially
         involved in producing or managing League of Legends.<br>League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.</p>

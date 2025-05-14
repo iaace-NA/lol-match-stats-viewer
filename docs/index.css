@@ -57,11 +57,11 @@ table {
 }
 
 .bool-true {
-    background-color: rgba(64, 128, 255, 0.2)!important;
+    background-color: rgba(64, 128, 255, 0.2) !important;
 }
 
 .bool-false {
-    background-color: rgba(255, 64, 64, 0.2)!important;
+    background-color: rgba(255, 64, 64, 0.2) !important;
 }
 
 .sticky {
@@ -90,6 +90,34 @@ table th {
     text-align: center;
 }
 
+/* Stats Graph Styles */
+#stats-graph-container {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+#stats-graph {
+    transition: height 0.3s ease;
+    overflow: hidden;
+}
+
+#stat-selector {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px 12px;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+.match-victory .plotly-bar {
+    background-color: rgba(64, 128, 255, 0.2);
+}
+
+.match-defeat .plotly-bar {
+    background-color: rgba(255, 64, 64, 0.2);
+}
 
 /* From https://loading.io/css/ */
 
@@ -182,6 +210,7 @@ table th {
     0% {
         opacity: 1;
     }
+
     100% {
         opacity: 0;
     }
