@@ -103,6 +103,50 @@ table th {
     overflow: hidden;
 }
 
+/* Stat checkbox container styles */
+.stat-checkbox-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 15px;
+    background-color: #fff;
+}
+
+.form-check {
+    padding: 6px 8px 6px 28px;
+    /* Increased left padding to provide more space */
+    margin-left: 5px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+    position: relative;
+}
+
+.form-check-input {
+    cursor: pointer;
+    position: absolute;
+    left: 4px;
+    /* Moved checkbox more to the right */
+    top: 50%;
+    transform: translateY(-50%);
+    margin-top: 0;
+    margin-left: 0 !important;
+    margin-right: 5px !important;
+}
+
+.form-check-label {
+    cursor: pointer;
+    font-size: 0.95rem;
+    display: block;
+    padding-left: 0;
+    /* Removed padding since we handle positioning with the parent element */
+}
+
+#plot-stats-button {
+    width: 100%;
+    margin-top: 10px;
+}
+
 #stat-selector {
     border: 1px solid #ccc;
     border-radius: 4px;
@@ -214,4 +258,40 @@ table th {
     100% {
         opacity: 0;
     }
+}
+
+/* Add these styles to the end of the CSS file */
+
+.stat-category {
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.stat-category:last-child {
+    border-bottom: none;
+}
+
+.stat-category h5 {
+    color: #333;
+    margin-top: 5px;
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.form-check {
+    margin-bottom: 3px;
+    padding-left: 25px;
+    /* Increase indent for checkboxes */
+}
+
+/* Style for the summation checkbox to stand out */
+#sum-selections-checkbox {
+    border-color: #007bff;
+}
+
+#sum-selections-checkbox:checked {
+    background-color: #007bff;
+    border-color: #007bff;
 }

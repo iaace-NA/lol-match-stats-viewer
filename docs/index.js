@@ -62,6 +62,129 @@ const graphable_stats = [
     "neutralMinionsKilled", "wardsKilled", "spell1Casts", "spell2Casts", "spell3Casts", "spell4Casts"
 ];
 
+// Define stat categories for grouping in the UI
+const stat_categories = [
+    {
+        name: "Combat Stats",
+        stats: [
+            "kills", "deaths", "assists",
+            "doubleKills", "tripleKills", "quadraKills", "pentaKills", "unrealKills",
+            "largestKillingSpree", "largestMultiKill", "killingSprees",
+            "longestTimeSpentLiving", "firstBloodKill", "firstBloodAssist"
+        ]
+    },
+    {
+        name: "Damage",
+        stats: [
+            "totalDamageDealtToChampions",
+            "physicalDamageDealtToChampions", "magicDamageDealtToChampions", "trueDamageDealtToChampions",
+            "totalDamageDealt", "physicalDamageDealt", "magicDamageDealt", "trueDamageDealt",
+            "largestCriticalStrike", "damageDealtToObjectives", "damageDealtToTurrets"
+        ]
+    },
+    {
+        name: "Durability",
+        stats: [
+            "totalDamageTaken", "physicalDamageTaken", "magicDamageTaken", "trueDamageTaken",
+            "damageSelfMitigated", "totalHeal", "totalUnitsHealed"
+        ]
+    },
+    {
+        name: "Economy",
+        stats: [
+            "goldEarned", "goldSpent", "totalMinionsKilled", "neutralMinionsKilled"
+        ]
+    },
+    {
+        name: "Vision & Control",
+        stats: [
+            "visionScore", "wardsPlaced", "wardsKilled", "visionWardsBoughtInGame",
+            "sightWardsBoughtInGame", "timeCCingOthers", "totalTimeCrowdControlDealt"
+        ]
+    },
+    {
+        name: "Objectives",
+        stats: [
+            "turretKills", "inhibitorKills", "firstTowerKill", "firstTowerAssist",
+            "firstInhibitorKill", "firstInhibitorAssist"
+        ]
+    },
+    {
+        name: "Ability Usage",
+        stats: [
+            "spell1Casts", "spell2Casts", "spell3Casts", "spell4Casts",
+            "summoner1Casts", "summoner2Casts"
+        ]
+    },
+    {
+        name: "Other",
+        stats: [] // Will be populated automatically with any stats not in other categories
+    }
+];
+
+// Function to get the category for a stat
+function getStatCategory(statName) {
+    for (const category of stat_categories) {
+        if (category.stats.includes(statName)) {
+            return category.name;
+        }
+    }
+    return "Other"; // Default category for uncategorized stats
+}
+
+// Function to sort stats by their categories and maintain original ordering within categories
+function getSortedStats(availableStats) {
+    // Create a map of all stats by category
+    const statsByCategory = {};
+
+    // Initialize all categories
+    for (const category of stat_categories) {
+        statsByCategory[category.name] = [];
+    }
+
+    // Sort stats into categories
+    for (const statName of availableStats) {
+        const category = getStatCategory(statName);
+        statsByCategory[category].push(statName);
+    }
+
+    // For each category, sort stats in the same order they appear in stat_categories
+    for (const category of stat_categories) {
+        // Only process if this category has stats
+        if (statsByCategory[category.name].length > 0) {
+            // Create a copy of the original array to sort
+            const statsInCategory = [...statsByCategory[category.name]];
+
+            // Sort based on the order in the stat_categories definition
+            statsInCategory.sort((a, b) => {
+                // For stats in the predefined category, use the order in stat_categories
+                if (category.stats.includes(a) && category.stats.includes(b)) {
+                    return category.stats.indexOf(a) - category.stats.indexOf(b);
+                }
+                // If only one stat is in the predefined list, prioritize it
+                else if (category.stats.includes(a)) {
+                    return -1;
+                }
+                else if (category.stats.includes(b)) {
+                    return 1;
+                }
+                // For stats not in the predefined list (like new stats that were added later),
+                // sort them alphabetically at the end
+                else {
+                    const nameA = stat_name_translation[a] || camelToTitleCase(a);
+                    const nameB = stat_name_translation[b] || camelToTitleCase(b);
+                    return nameA.localeCompare(nameB);
+                }
+            });
+
+            // Replace the original array with the sorted one
+            statsByCategory[category.name] = statsInCategory;
+        }
+    }
+
+    return statsByCategory;
+}
+
 function camelToTitleCase(str) {
     // Insert a space before all capital letters
     let result = str.replace(/([A-Z])/g, ' $1');
@@ -205,26 +328,32 @@ loadJSON(match_url).then(match_data => {
         // Initialize the stats graph functionality
         populateStatSelector(match);
 
-        // Hide the graph container initially until user selects a stat
-        $("stats-graph").style.height = "0px";
-
-        // Add event listener for stat selection to show the graph
-        $("stat-selector").addEventListener('change', function () {
-            const selectedStat = this.value;
-            if (selectedStat) {
-                createStatsGraph(match, selectedStat);
-            }
-        });
-
-        // Add event listener for chart type selection to update the graph
+        // Add event listener for chart type selection to update the graph when chart type changes
         $("chart-type-selector").addEventListener('change', function () {
-            const selectedStat = $("stat-selector").value;
-            if (selectedStat) {
-                createStatsGraph(match, selectedStat);
+            const selectedStats = getSelectedStats();
+            if (selectedStats.length > 0) {
+                createMultiStatsGraph(match, selectedStats);
             }
         });
+
+        // Plot the default selected stats on page load (with a slight delay to ensure DOM is ready)
+        setTimeout(() => {
+            const selectedStats = getSelectedStats();
+            if (selectedStats.length > 0) {
+                createMultiStatsGraph(match, selectedStats);
+            }
+        }, 500);
     }).catch(handleError);
 }).catch(handleError);
+
+// Helper function to get selected stats
+function getSelectedStats() {
+    const selectedStats = [];
+    document.querySelectorAll('.stat-checkbox:checked').forEach(checkbox => {
+        selectedStats.push(checkbox.value);
+    });
+    return selectedStats;
+}
 
 function runeToCell(id) {
     return cellUnsafe(runeIDtoImg(id));
@@ -335,7 +464,6 @@ function standardTimestamp(sec) {
     let secs = Math.floor(parseInt(sec) % 60);
     if (secs < 10) secs = "0" + secs;
     if (mins < 10) mins = "0" + mins;
-    if (hours < 10) hours = "0" + hours;
     if (hours == "00" && days == 0) return `${mins}m:${secs}s`;
     else if (days == 0) return `${hours}h:${mins}m:${secs}s`;
     else return `${days}d:${hours}h:${mins}m:${secs}s`;
@@ -343,22 +471,36 @@ function standardTimestamp(sec) {
 
 // Function to populate the stat selector dropdown
 function populateStatSelector(match) {
-    const statSelector = $("stat-selector");
+    const statSelectorContainer = $("stat-selector").parentElement;
+
+    // Replace the select element with a div for checkboxes
+    const oldSelector = $("stat-selector");
+    const statCheckboxContainer = document.createElement("div");
+    statCheckboxContainer.id = "stat-checkbox-container";
+    statCheckboxContainer.className = "stat-checkbox-container overflow-auto";
+    statCheckboxContainer.style.maxHeight = "400px"; // Increased height from 300px to 400px
+    statCheckboxContainer.style.width = "100%"; // Use full width of parent container instead of fixed 300px
+    statCheckboxContainer.style.border = "1px solid #dee2e6";
+    statCheckboxContainer.style.borderRadius = "0.25rem";
+    statCheckboxContainer.style.padding = "10px";
+
+    // Replace the selector with the checkbox container
+    oldSelector.parentNode.replaceChild(statCheckboxContainer, oldSelector);
 
     // Create a list of all available stats for graphing
-    const availableStats = new Set();
+    const availableStats = [];
 
     // Add prioritized stats first
     for (const statName of prioritized_stats) {
         if (match.participants[0].stats[statName] !== undefined) {
-            availableStats.add(statName);
+            availableStats.push(statName);
         }
     }
 
     // Add other graphable stats
     for (const statName of graphable_stats) {
-        if (!availableStats.has(statName) && match.participants[0].stats[statName] !== undefined) {
-            availableStats.add(statName);
+        if (!availableStats.includes(statName) && match.participants[0].stats[statName] !== undefined) {
+            availableStats.push(statName);
         }
     }
 
@@ -366,36 +508,77 @@ function populateStatSelector(match) {
     for (const participant of match.participants) {
         for (const statName in participant.stats) {
             if (!exclude_stat_name.includes(statName) &&
-                !availableStats.has(statName) &&
+                !availableStats.includes(statName) &&
                 typeof participant.stats[statName] === 'number') {
-                availableStats.add(statName);
+                availableStats.push(statName);
             }
         }
     }
 
-    // Clear existing options and add new ones
-    statSelector.innerHTML = '<option value="" disabled selected>Select a stat to display</option>';
+    // Sort stats by categories
+    const sortedStats = getSortedStats(availableStats);
 
-    // Add options to the dropdown
-    for (const statName of availableStats) {
-        const option = document.createElement('option');
-        option.value = statName;
+    // Create checkboxes for each stat category
+    for (const categoryName in sortedStats) {
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'stat-category';
 
-        // Use translated stat name if available
-        if (stat_name_translation[statName]) {
-            option.textContent = stat_name_translation[statName];
-        } else {
-            option.textContent = camelToTitleCase(statName);
-        }
+        const categoryHeader = document.createElement('h5');
+        categoryHeader.textContent = categoryName;
+        categoryDiv.appendChild(categoryHeader);
 
-        statSelector.appendChild(option);
+        sortedStats[categoryName].forEach(statName => {
+            const checkboxDiv = document.createElement('div');
+            checkboxDiv.className = 'form-check';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'form-check-input stat-checkbox';
+            checkbox.id = `stat-${statName}`;
+            checkbox.value = statName;
+            checkbox.dataset.stat = statName;
+
+            // Only select totalDamageDealtToChampions by default
+            checkbox.checked = (statName === 'totalDamageDealtToChampions');
+
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.htmlFor = `stat-${statName}`;
+
+            // Use translated stat name if available
+            if (stat_name_translation[statName]) {
+                label.textContent = stat_name_translation[statName];
+            } else {
+                label.textContent = camelToTitleCase(statName);
+            }
+
+            // Add click event listener to update the plot immediately when a checkbox changes
+            checkbox.addEventListener('change', function () {
+                const selectedStats = getSelectedStats();
+                // Only update if at least one stat is selected
+                if (selectedStats.length > 0) {
+                    createMultiStatsGraph(match, selectedStats);
+                } else if (selectedStats.length === 0) {
+                    // If no stats are selected, show a brief message in the plot area
+                    const graphContainer = $("stats-graph");
+                    graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
+                }
+            });
+
+            checkboxDiv.appendChild(checkbox);
+            checkboxDiv.appendChild(label);
+            categoryDiv.appendChild(checkboxDiv);
+        });
+
+        statCheckboxContainer.appendChild(categoryDiv);
     }
 
-    // Add event listener for stat selection
-    statSelector.addEventListener('change', function () {
-        const selectedStat = this.value;
-        if (selectedStat) {
-            createStatsGraph(match, selectedStat);
+    // Add event listener for the "Sum Selections" checkbox
+    const sumSelectionsCheckbox = $("sum-selections-checkbox");
+    sumSelectionsCheckbox.addEventListener('change', function () {
+        const selectedStats = getSelectedStats();
+        if (selectedStats.length > 0) {
+            createMultiStatsGraph(match, selectedStats);
         }
     });
 }
@@ -551,4 +734,261 @@ function createStatsGraph(match, statName) {
 
     // Update the height of the graph container
     $("stats-graph").style.height = "600px";  // Match the container height
+}
+
+// Function to create a multi-stats graph grouped by player
+function createMultiStatsGraph(match, selectedStats) {
+    const graphContainer = $("stats-graph");
+    const chartType = $("chart-type-selector").value;
+    const isHorizontal = chartType === "horizontal";
+    const sumSelections = $("sum-selections-checkbox").checked;
+
+    // Collect player information
+    const players = match.participants.map(participant => {
+        const playerIdentity = match.participantIdentities.find(pI => pI.participantId === participant.participantId);
+        const playerName = playerIdentity ? playerIdentity.player.summonerName : `Player ${participant.participantId}`;
+        let champName = '';
+        let champKey = '';
+
+        // Find champion info
+        for (let key in champion_data.data) {
+            if (champion_data.data[key].key == participant.championId) {
+                champName = champion_data.data[key].name;
+                champKey = key;
+                break;
+            }
+        }
+
+        // Collect stats for this player
+        const statValues = {};
+        selectedStats.forEach(statName => {
+            statValues[statName] = participant.stats[statName] || 0;
+        });
+
+        return {
+            id: participant.participantId,
+            name: playerName,
+            teamId: participant.teamId,
+            champName,
+            champKey,
+            statValues
+        };
+    });
+
+    // Sort players by team
+    players.sort((a, b) => a.teamId - b.teamId);
+
+    const traces = [];
+
+    // Get display names for stats
+    const statDisplayNames = selectedStats.map(statName => {
+        if (stat_name_translation[statName]) {
+            return stat_name_translation[statName];
+        } else {
+            return camelToTitleCase(statName);
+        }
+    });
+
+    // Define color palette for different stats
+    const statColors = [
+        'rgba(64, 128, 255, 0.7)',
+        'rgba(255, 64, 64, 0.7)',
+        'rgba(60, 180, 75, 0.7)',
+        'rgba(255, 165, 0, 0.7)',
+        'rgba(128, 0, 128, 0.7)',
+        'rgba(0, 128, 128, 0.7)',
+        'rgba(255, 215, 0, 0.7)',
+        'rgba(210, 105, 30, 0.7)',
+        'rgba(169, 169, 169, 0.7)',
+        'rgba(0, 0, 0, 0.7)'
+    ];
+
+    // Create player labels that include champion name and player name
+    const playerLabels = players.map(player => `${player.champName} (${player.name})`);
+
+    // Create champion images array for axis labeling
+    const champImages = players.map(player => player.champKey);
+
+    if (sumSelections && selectedStats.length > 0) {
+        // Create a single trace with summed stats
+        const summedValues = players.map(player => {
+            return selectedStats.reduce((sum, statName) => sum + player.statValues[statName], 0);
+        });
+
+        // If we have multiple stats selected, use a stacked bar chart
+        if (selectedStats.length > 1) {
+            // Create one trace per stat, but with stack group for sum representation
+            selectedStats.forEach((statName, statIndex) => {
+                // Get stat display name
+                let statDisplayName = statDisplayNames[statIndex];
+
+                // Values for each player for this stat
+                const values = players.map(player => player.statValues[statName]);
+
+                // Choose a color for this stat
+                const color = statColors[statIndex % statColors.length];
+                const borderColor = color.replace('0.7', '1.0');
+
+                const trace = {
+                    name: statDisplayName,
+                    type: 'bar',
+                    x: isHorizontal ? values : champImages,
+                    y: isHorizontal ? champImages : values,
+                    orientation: isHorizontal ? 'h' : 'v',
+                    marker: {
+                        color: color,
+                        line: {
+                            color: borderColor,
+                            width: 1.5
+                        }
+                    },
+                    hoverinfo: 'text',
+                    hovertext: players.map((player, i) => {
+                        return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
+                    })
+                };
+                traces.push(trace);
+            });
+        } else {
+            // If only one stat, use a regular bar chart
+            const trace = {
+                name: 'Sum of Selected Stats',
+                type: 'bar',
+                x: isHorizontal ? summedValues : champImages,
+                y: isHorizontal ? champImages : summedValues,
+                text: summedValues.map(val => val.toLocaleString()),
+                textposition: 'auto',
+                orientation: isHorizontal ? 'h' : 'v',
+                marker: {
+                    color: players.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 0.7)' : 'rgba(255, 64, 64, 0.7)'),
+                    line: {
+                        color: players.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 1)' : 'rgba(255, 64, 64, 1)'),
+                        width: 1.5
+                    }
+                },
+                hoverinfo: 'text',
+                hovertext: players.map((player, i) => {
+                    return `<b>${player.name}</b><br>${player.champName}<br>Total: ${summedValues[i].toLocaleString()}`;
+                })
+            };
+            traces.push(trace);
+        }
+    } else {
+        // Original implementation for non-summed stats
+        // Create a trace for each stat
+        selectedStats.forEach((statName, statIndex) => {
+            // Get stat display name
+            let statDisplayName = statDisplayNames[statIndex];
+
+            // Values for each player for this stat
+            const values = players.map(player => player.statValues[statName]);
+
+            // Choose a color for this stat
+            const color = statColors[statIndex % statColors.length];
+            const borderColor = color.replace('0.7', '1.0');
+
+            // Create the trace for this stat
+            const trace = {
+                name: statDisplayName,
+                type: 'bar',
+                // If horizontal, swap x and y
+                x: isHorizontal ? values : champImages,
+                y: isHorizontal ? champImages : values,
+                text: values.map(val => val.toLocaleString()),
+                textposition: 'auto',
+                orientation: isHorizontal ? 'h' : 'v',
+                marker: {
+                    color: color,
+                    line: {
+                        color: borderColor,
+                        width: 1.5
+                    }
+                },
+                hoverinfo: 'text',
+                hovertext: players.map((player, i) => {
+                    return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
+                })
+            };
+
+            traces.push(trace);
+        });
+    }
+
+    // Set up the layout for the graph
+    const layout = {
+        title: 'Multiple Stats Comparison',
+        barmode: sumSelections && selectedStats.length > 1 ? 'stack' : 'group', // Stack when summing multiple stats
+        xaxis: isHorizontal ? {
+            title: 'Value'
+        } : {
+            title: 'Champions',
+            tickangle: 0,
+            tickmode: 'array',
+            tickvals: players.map(player => player.champKey),
+            ticktext: players.map(player => `${player.champName} (${player.name})`),
+            tickfont: {
+                size: 9
+            },
+            tickangle: 45 // Angle text for readability
+        },
+        yaxis: isHorizontal ? {
+            title: 'Champions',
+            tickmode: 'array',
+            tickvals: players.map(player => player.champKey),
+            ticktext: players.map(player => `${player.champName} (${player.name})`),
+            tickfont: {
+                size: 10
+            }
+        } : {
+            title: 'Value'
+        },
+        margin: {
+            l: isHorizontal ? 150 : 80,
+            r: 50,
+            b: isHorizontal ? 50 : 170, // Increase bottom margin to fit angled labels in vertical mode
+            t: 70,
+            pad: 4
+        },
+        legend: {
+            title: {
+                text: 'Statistics'
+            },
+            orientation: 'h',
+            yanchor: 'bottom',
+            y: 1.02,
+            xanchor: 'right',
+            x: 1
+        },
+        // Add champion images
+        images: players.map((player, i) => ({
+            source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${player.champKey}.png`,
+            x: isHorizontal ? -0.15 : i / (players.length - 1),
+            y: isHorizontal ? i / (players.length - 1) : -0.15,
+            xref: 'paper',
+            yref: 'paper',
+            sizex: 0.05,
+            sizey: 0.05,
+            xanchor: isHorizontal ? 'right' : 'center',
+            yanchor: isHorizontal ? 'middle' : 'top'
+        })),
+        height: 600
+    };
+
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        toImageButtonOptions: {
+            format: 'png',
+            filename: 'LoL_Multiple_Stats_Comparison',
+            height: 500,
+            width: 700,
+            scale: 2
+        }
+    };
+
+    Plotly.newPlot(graphContainer, traces, layout, config);
+
+    // Update the height of the graph container
+    $("stats-graph").style.height = "600px";
 }
