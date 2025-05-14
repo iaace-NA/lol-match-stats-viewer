@@ -65,21 +65,21 @@ const graphable_stats = [
 // Define stat categories for grouping in the UI
 const stat_categories = [
     {
-        name: "Combat Stats",
-        stats: [
-            "kills", "deaths", "assists",
-            "doubleKills", "tripleKills", "quadraKills", "pentaKills", "unrealKills",
-            "largestKillingSpree", "largestMultiKill", "killingSprees",
-            "longestTimeSpentLiving", "firstBloodKill", "firstBloodAssist"
-        ]
-    },
-    {
         name: "Damage",
         stats: [
             "totalDamageDealtToChampions",
             "physicalDamageDealtToChampions", "magicDamageDealtToChampions", "trueDamageDealtToChampions",
             "totalDamageDealt", "physicalDamageDealt", "magicDamageDealt", "trueDamageDealt",
             "largestCriticalStrike", "damageDealtToObjectives", "damageDealtToTurrets"
+        ]
+    },
+    {
+        name: "Combat Stats",
+        stats: [
+            "kills", "deaths", "assists",
+            "doubleKills", "tripleKills", "quadraKills", "pentaKills", "unrealKills",
+            "largestKillingSpree", "largestMultiKill", "killingSprees",
+            "longestTimeSpentLiving", "firstBloodKill", "firstBloodAssist"
         ]
     },
     {
@@ -403,7 +403,20 @@ function loadJSON(url, allow_null = false) {
 
 function handleError(err) {
     console.error(err);
-    alert(err);
+    // Remove spinner and show error message in scoreboard
+    var scoreboard = $("scoreboard");
+    if (scoreboard) {
+        scoreboard.innerHTML = '<div class="alert alert-danger text-center mt-5">' +
+            (err instanceof SyntaxError && /JSON/.test(err.message)
+                ? "No match or timeline data provided, or the data could not be loaded. Please select an example or provide valid data sources in the URL."
+                : escapeHtml(err.message || err)) +
+            '</div>';
+    }
+    // Optionally clear stats graph and player stats
+    var statsGraph = $("stats-graph");
+    if (statsGraph) statsGraph.innerHTML = "";
+    var playerStats = $("player-stats");
+    if (playerStats) playerStats.innerHTML = "";
 }
 
 function escapeHtml(unsafe) {
@@ -778,6 +791,9 @@ function createMultiStatsGraph(match, selectedStats) {
     // Sort players by team
     players.sort((a, b) => a.teamId - b.teamId);
 
+    // In horizontal mode, reverse the players array so they appear in reverse order on the y-axis
+    const orderedPlayers = isHorizontal ? [...players].reverse() : players;
+
     const traces = [];
 
     // Get display names for stats
@@ -804,14 +820,14 @@ function createMultiStatsGraph(match, selectedStats) {
     ];
 
     // Create player labels that include champion name and player name
-    const playerLabels = players.map(player => `${player.champName} (${player.name})`);
+    const playerLabels = orderedPlayers.map(player => `${player.champName} (${player.name})`);
 
     // Create champion images array for axis labeling
-    const champImages = players.map(player => player.champKey);
+    const champImages = orderedPlayers.map(player => player.champKey);
 
     if (sumSelections && selectedStats.length > 0) {
         // Create a single trace with summed stats
-        const summedValues = players.map(player => {
+        const summedValues = orderedPlayers.map(player => {
             return selectedStats.reduce((sum, statName) => sum + player.statValues[statName], 0);
         });
 
@@ -823,7 +839,7 @@ function createMultiStatsGraph(match, selectedStats) {
                 let statDisplayName = statDisplayNames[statIndex];
 
                 // Values for each player for this stat
-                const values = players.map(player => player.statValues[statName]);
+                const values = orderedPlayers.map(player => player.statValues[statName]);
 
                 // Choose a color for this stat
                 const color = statColors[statIndex % statColors.length];
@@ -843,7 +859,7 @@ function createMultiStatsGraph(match, selectedStats) {
                         }
                     },
                     hoverinfo: 'text',
-                    hovertext: players.map((player, i) => {
+                    hovertext: orderedPlayers.map((player, i) => {
                         return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
                     })
                 };
@@ -860,28 +876,32 @@ function createMultiStatsGraph(match, selectedStats) {
                 textposition: 'auto',
                 orientation: isHorizontal ? 'h' : 'v',
                 marker: {
-                    color: players.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 0.7)' : 'rgba(255, 64, 64, 0.7)'),
+                    color: orderedPlayers.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 0.7)' : 'rgba(255, 64, 64, 0.7)'),
                     line: {
-                        color: players.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 1)' : 'rgba(255, 64, 64, 1)'),
+                        color: orderedPlayers.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 1)' : 'rgba(255, 64, 64, 1)'),
                         width: 1.5
                     }
                 },
                 hoverinfo: 'text',
-                hovertext: players.map((player, i) => {
+                hovertext: orderedPlayers.map((player, i) => {
                     return `<b>${player.name}</b><br>${player.champName}<br>Total: ${summedValues[i].toLocaleString()}`;
                 })
             };
             traces.push(trace);
         }
     } else {
-        // Original implementation for non-summed stats
+        // Handle normal mode (non-summed stats)
+        // For horizontal mode, reverse the order of stats to display them in a more intuitive order
+        const orderedSelectedStats = isHorizontal ? [...selectedStats].reverse() : selectedStats;
+        const orderedStatDisplayNames = isHorizontal ? [...statDisplayNames].reverse() : statDisplayNames;
+
         // Create a trace for each stat
-        selectedStats.forEach((statName, statIndex) => {
+        orderedSelectedStats.forEach((statName, statIndex) => {
             // Get stat display name
-            let statDisplayName = statDisplayNames[statIndex];
+            let statDisplayName = orderedStatDisplayNames[statIndex];
 
             // Values for each player for this stat
-            const values = players.map(player => player.statValues[statName]);
+            const values = orderedPlayers.map(player => player.statValues[statName]);
 
             // Choose a color for this stat
             const color = statColors[statIndex % statColors.length];
@@ -905,7 +925,7 @@ function createMultiStatsGraph(match, selectedStats) {
                     }
                 },
                 hoverinfo: 'text',
-                hovertext: players.map((player, i) => {
+                hovertext: orderedPlayers.map((player, i) => {
                     return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
                 })
             };
@@ -924,8 +944,8 @@ function createMultiStatsGraph(match, selectedStats) {
             title: 'Champions',
             tickangle: 0,
             tickmode: 'array',
-            tickvals: players.map(player => player.champKey),
-            ticktext: players.map(player => `${player.champName} (${player.name})`),
+            tickvals: champImages,
+            ticktext: playerLabels,
             tickfont: {
                 size: 9
             },
@@ -934,8 +954,8 @@ function createMultiStatsGraph(match, selectedStats) {
         yaxis: isHorizontal ? {
             title: 'Champions',
             tickmode: 'array',
-            tickvals: players.map(player => player.champKey),
-            ticktext: players.map(player => `${player.champName} (${player.name})`),
+            tickvals: champImages,
+            ticktext: playerLabels,
             tickfont: {
                 size: 10
             }
@@ -960,10 +980,10 @@ function createMultiStatsGraph(match, selectedStats) {
             x: 1
         },
         // Add champion images
-        images: players.map((player, i) => ({
-            source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${player.champKey}.png`,
-            x: isHorizontal ? -0.15 : i / (players.length - 1),
-            y: isHorizontal ? i / (players.length - 1) : -0.15,
+        images: champImages.map((champKey, i) => ({
+            source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
+            x: isHorizontal ? -0.15 : i / (champImages.length - 1),
+            y: isHorizontal ? i / (champImages.length - 1) : -0.15,
             xref: 'paper',
             yref: 'paper',
             sizex: 0.05,
