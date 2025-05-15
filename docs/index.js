@@ -876,7 +876,7 @@ function createMultiStatsGraph(match, selectedStats) {
         // Add champion images
         images: champImages.map((champKey, i) => ({
             source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
-            x: isHorizontal ? -0.05 : (i / champImages.length + 0.03),
+            x: isHorizontal ? -0.02 : (i / champImages.length + 0.03),
             y: isHorizontal ? (i / champImages.length) + 0.085 : -0.05,
             xref: 'paper',
             yref: 'paper',
