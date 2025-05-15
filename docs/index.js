@@ -44,7 +44,13 @@ const stat_name_translation = {
     "spell3Casts": "E Ability Casts",
     "spell4Casts": "R Ability Casts",
     "summoner1Casts": "D Summoner Casts",
-    "summoner2Casts": "F Summoner Casts"
+    "summoner2Casts": "F Summoner Casts",
+    "totalMinionsKilled": "Lane Minions Killed",
+    "neutralMinionsKilled": "Neutral Units Killed",
+    "timeCCingOthers": "Effective CC Duration (seconds)",
+    "totalTimeCCDealt": "Total CC Duration (seconds)",
+    "visionWardsBoughtInGame": "Control Wards Purchased",
+    "sightWardsBoughtInGame": "Sight Wards Purchased"
 };
 
 // Stats that should be prioritized in the dropdown for the graph
@@ -76,6 +82,7 @@ const stat_categories = [
     {
         name: "Combat Stats",
         stats: [
+            "champLevel",
             "kills", "deaths", "assists",
             "doubleKills", "tripleKills", "quadraKills", "pentaKills", "unrealKills",
             "largestKillingSpree", "largestMultiKill", "killingSprees",
@@ -85,8 +92,9 @@ const stat_categories = [
     {
         name: "Durability",
         stats: [
-            "totalDamageTaken", "physicalDamageTaken", "magicDamageTaken", "trueDamageTaken",
-            "damageSelfMitigated", "totalHeal", "totalUnitsHealed"
+            "totalDamageTaken", "physicalDamageTaken", "magicalDamageTaken", "trueDamageTaken",
+            "damageSelfMitigated", "totalHeal", "totalUnitsHealed",
+            "totalDamageShieldedOnTeammates", "totalHealsOnTeammates"
         ]
     },
     {
@@ -99,7 +107,8 @@ const stat_categories = [
         name: "Vision & Control",
         stats: [
             "visionScore", "wardsPlaced", "wardsKilled", "visionWardsBoughtInGame",
-            "sightWardsBoughtInGame", "timeCCingOthers", "totalTimeCrowdControlDealt"
+            "sightWardsBoughtInGame", "timeCCingOthers", "totalTimeCrowdControlDealt",
+            "totalTimeCCDealt"
         ]
     },
     {
