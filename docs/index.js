@@ -38,7 +38,7 @@ const exclude_stat_name = [
     "participantId"
 ];
 const stat_name_translation = {
-    "longestTimeSpentLiving": "Longest Time Spent Living (seconds)",
+    "longestTimeSpentLiving": "Longest Duration Alive (seconds)",
     "spell1Casts": "Q Ability Casts",
     "spell2Casts": "W Ability Casts",
     "spell3Casts": "E Ability Casts",
@@ -50,7 +50,8 @@ const stat_name_translation = {
     "timeCCingOthers": "Effective CC Duration (seconds)",
     "totalTimeCCDealt": "Total CC Duration (seconds)",
     "visionWardsBoughtInGame": "Control Wards Purchased",
-    "sightWardsBoughtInGame": "Sight Wards Purchased"
+    "sightWardsBoughtInGame": "Sight Wards Purchased",
+    "totalUnitsHealed": "Unique Targets Healed"
 };
 
 // Stats that should be prioritized in the dropdown for the graph
@@ -345,6 +346,29 @@ loadJSON(match_url).then(match_data => {
             }
         });
 
+        // Add event listener for the "Sum Selections" checkbox
+        const sumSelectionsCheckbox = $("sum-selections-checkbox");
+        sumSelectionsCheckbox.addEventListener('change', function () {
+            const selectedStats = getSelectedStats();
+            if (selectedStats.length > 0) {
+                createMultiStatsGraph(match, selectedStats);
+            }
+        });
+
+        // Add event listener for the "Clear All" hyperlink
+        const clearAllLink = document.getElementById('clear-all-stats');
+        if (clearAllLink) {
+            clearAllLink.onclick = function (e) {
+                e.preventDefault();
+                document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
+                // Show message in plot area
+                const graphContainer = $("stats-graph");
+                if (graphContainer) {
+                    graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
+                }
+            };
+        }
+
         // Plot the default selected stats on page load (with a slight delay to ensure DOM is ready)
         setTimeout(() => {
             const selectedStats = getSelectedStats();
@@ -603,6 +627,20 @@ function populateStatSelector(match) {
             createMultiStatsGraph(match, selectedStats);
         }
     });
+
+    // Add event listener for the "Clear All" hyperlink
+    const clearAllLink = document.getElementById('clear-all-stats');
+    if (clearAllLink) {
+        clearAllLink.onclick = function (e) {
+            e.preventDefault();
+            document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
+            // Show message in plot area
+            const graphContainer = $("stats-graph");
+            if (graphContainer) {
+                graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
+            }
+        };
+    }
 }
 
 // Function to create the stats bar graph using Plotly
