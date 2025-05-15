@@ -643,159 +643,6 @@ function populateStatSelector(match) {
     }
 }
 
-// Function to create the stats bar graph using Plotly
-function createStatsGraph(match, statName) {
-    const graphContainer = $("stats-graph");
-    const chartType = $("chart-type-selector").value;
-    const isHorizontal = chartType === "horizontal";
-
-    // Prepare data for the graph
-    const teams = [[], []]; // Team 0 and Team 1
-    const teamColors = ['rgba(64, 128, 255, 0.7)', 'rgba(255, 64, 64, 0.7)']; // Blue/Red team colors
-    const teamBorderColors = ['rgba(64, 128, 255, 1)', 'rgba(255, 64, 64, 1)'];
-
-    // Get data for each participant
-    const participantNames = [];
-    const participantValues = [];
-    const participantColors = [];
-    const participantBorderColors = [];
-    const champImages = [];
-    const champNames = [];
-    const champLabels = []; // Add array for champion labels with player names
-
-    // For horizontal charts, sort participants so blue team appears above red team
-    const sortedParticipants = [...match.participants];
-
-    // When in horizontal mode, sort so that blue team (100) comes before red team (200)
-    if (isHorizontal) {
-        sortedParticipants.sort((a, b) => a.teamId - b.teamId);
-    }
-
-    sortedParticipants.forEach(participant => {
-        const teamIndex = participant.teamId === 100 ? 0 : 1; // 100 is blue team, 200 is red team
-        const playerIdentity = match.participantIdentities.find(pI => pI.participantId === participant.participantId);
-        const playerName = playerIdentity ? playerIdentity.player.summonerName : `Player ${participant.participantId}`;
-        const statValue = participant.stats[statName] || 0;
-
-        participantNames.push(playerName);
-        participantValues.push(statValue);
-        participantColors.push(teamColors[teamIndex]);
-        participantBorderColors.push(teamBorderColors[teamIndex]);
-
-        // Get champion image and name
-        for (let champKey in champion_data.data) {
-            if (champion_data.data[champKey].key == participant.championId) {
-                champImages.push(`${champKey}`);
-                champNames.push(champion_data.data[champKey].name);
-                // Create champion label with player name - unified for both horizontal and vertical charts
-                champLabels.push(`${champion_data.data[champKey].name} (${playerName})`);
-                break;
-            }
-        }
-    });
-
-    // Get the display name for the stat
-    let statDisplayName = statName;
-    if (stat_name_translation[statName]) {
-        statDisplayName = stat_name_translation[statName];
-    } else {
-        statDisplayName = camelToTitleCase(statName);
-    }
-
-    // Create the Plotly bar chart
-    const data = [{
-        type: 'bar',
-        // If horizontal, swap x and y
-        x: isHorizontal ? participantValues : champImages,
-        y: isHorizontal ? champImages : participantValues,
-        text: participantValues.map(val => val.toLocaleString()),
-        textposition: 'auto',
-        orientation: isHorizontal ? 'h' : 'v', // Set orientation based on chart type
-        marker: {
-            color: participantColors,
-            line: {
-                color: participantBorderColors,
-                width: 1.5
-            }
-        },
-        hoverinfo: 'text',
-        hovertext: participantNames.map((name, i) => {
-            return `<b>${name}</b><br>${champNames[i]}<br>${statDisplayName}: ${participantValues[i].toLocaleString()}`;
-        })
-    }];
-
-    // Set up the layout for the graph
-    const layout = {
-        title: statDisplayName,
-        // Configure axes based on orientation
-        xaxis: isHorizontal ? {
-            title: statDisplayName
-        } : {
-            title: 'Champions',
-            tickangle: 0,
-            tickmode: 'array',
-            tickvals: champImages,
-            // Use consistent labels for vertical charts too
-            ticktext: champLabels,
-            tickfont: {
-                size: 9
-            },
-            tickangle: 45 // Angle text for readability
-        },
-        yaxis: isHorizontal ? {
-            title: 'Champions',
-            tickmode: 'array',
-            tickvals: champImages,
-            ticktext: champLabels,
-            tickfont: {
-                size: 10
-            }
-        } : {
-            title: statDisplayName
-        },
-        margin: {
-            l: isHorizontal ? 150 : 50,
-            r: 50,
-            b: isHorizontal ? 50 : 170, // Increase bottom margin to fit angled labels in vertical mode
-            t: 50,
-            pad: 4
-        },
-        // Adjust champion images based on orientation
-        images: champImages.map((champKey, i) => ({
-            source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
-            x: isHorizontal ? -0.15 : i / (champImages.length - 1),
-            y: isHorizontal ? i / (champImages.length - 1) : -0.15,
-            xref: 'paper',
-            yref: 'paper',
-            sizex: 0.06,
-            sizey: 0.06,
-            xanchor: isHorizontal ? 'right' : 'center',
-            yanchor: isHorizontal ? 'middle' : 'top'
-        })),
-        height: 600,
-        bargap: 0.15,
-        barmode: 'group'
-    };
-
-    const config = {
-        responsive: true,
-        displayModeBar: true,
-        displaylogo: false,
-        toImageButtonOptions: {
-            format: 'png',
-            filename: `LoL_Stats_${statName}`,
-            height: 500,
-            width: 700,
-            scale: 2
-        }
-    };
-
-    Plotly.newPlot(graphContainer, data, layout, config);
-
-    // Update the height of the graph container
-    $("stats-graph").style.height = "600px";  // Match the container height
-}
-
 // Function to create a multi-stats graph grouped by player
 function createMultiStatsGraph(match, selectedStats) {
     const graphContainer = $("stats-graph");
@@ -1029,12 +876,12 @@ function createMultiStatsGraph(match, selectedStats) {
         // Add champion images
         images: champImages.map((champKey, i) => ({
             source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
-            x: isHorizontal ? -0.15 : i / (champImages.length - 1),
-            y: isHorizontal ? i / (champImages.length - 1) : -0.15,
+            x: isHorizontal ? -0.05 : (i / champImages.length + 0.03),
+            y: isHorizontal ? (i / champImages.length) + 0.085 : -0.05,
             xref: 'paper',
             yref: 'paper',
-            sizex: 0.05,
-            sizey: 0.05,
+            sizex: isHorizontal ? 0.05 : 0.075,
+            sizey: isHorizontal ? 0.05 : 0.075,
             xanchor: isHorizontal ? 'right' : 'center',
             yanchor: isHorizontal ? 'middle' : 'top'
         })),
