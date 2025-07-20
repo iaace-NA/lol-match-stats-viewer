@@ -1,4 +1,25 @@
+/**
+ * League of Legends Queue Groups Configuration
+ *
+ * This module contains the mapping of League of Legends queue IDs to their
+ * human-readable names and categorization by game mode/map type.
+ *
+ * Data is organized by queue groups for easy filtering and display in the UI.
+ * Queue IDs are based on Riot Games API documentation.
+ *
+ * @author iaace LLC
+ * @version 2.0.0
+ * @license AGPL-3.0
+ */
+
+"use strict";
+
+/**
+ * Array of queue configurations with ID, name, and group categorization
+ * @type {Array<{id: string|null, name: string, group: string}>}
+ */
 const QUEUE_GROUPS = [
+    // Special/Other queues
     {
         "id": "0",
         "name": "Custom (Not Supported)",
@@ -10,9 +31,7 @@ const QUEUE_GROUPS = [
         "group": "Other"
     },
 
-
-
-
+    // Summoner's Rift queues
     {
         "id": "430",
         "name": "SR Blind",
@@ -414,4 +433,67 @@ const QUEUE_GROUPS = [
         "name": "SR Tutorial 3",
         "group": "Tutorial"
     }
-]
+];
+
+/**
+ * Utility functions for working with queue data
+ */
+
+/**
+ * Find queue information by queue ID
+ * @param {string|number|null} queueId - The queue ID to search for
+ * @returns {Object|null} Queue object if found, null otherwise
+ */
+function findQueueById(queueId) {
+    const id = queueId ? String(queueId) : null;
+    return QUEUE_GROUPS.find(queue => queue.id === id) || null;
+}
+
+/**
+ * Get all unique queue groups
+ * @returns {Array<string>} Array of unique group names
+ */
+function getQueueGroups() {
+    return [...new Set(QUEUE_GROUPS.map(queue => queue.group))].sort();
+}
+
+/**
+ * Get all queues in a specific group
+ * @param {string} groupName - Name of the group to filter by
+ * @returns {Array<Object>} Array of queue objects in the specified group
+ */
+function getQueuesByGroup(groupName) {
+    return QUEUE_GROUPS.filter(queue => queue.group === groupName);
+}
+
+/**
+ * Get a human-readable queue name by ID
+ * @param {string|number|null} queueId - The queue ID
+ * @returns {string} Human-readable queue name
+ */
+function getQueueName(queueId) {
+    const queue = findQueueById(queueId);
+    return queue ? queue.name : "Unknown Queue";
+}
+
+/**
+ * Check if a queue ID represents a ranked queue
+ * @param {string|number|null} queueId - The queue ID to check
+ * @returns {boolean} True if the queue is ranked
+ */
+function isRankedQueue(queueId) {
+    const queue = findQueueById(queueId);
+    return queue ? queue.name.toLowerCase().includes('ranked') : false;
+}
+
+// Export for browser usage
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        QUEUE_GROUPS,
+        findQueueById,
+        getQueueGroups,
+        getQueuesByGroup,
+        getQueueName,
+        isRankedQueue
+    };
+}

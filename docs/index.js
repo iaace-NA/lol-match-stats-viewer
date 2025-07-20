@@ -1,908 +1,1121 @@
+/**
+ * League of Legends Match Statistics Viewer
+ *
+ * A browser-based application for visualizing League of Legends match statistics
+ * from Riot Games API v4 and v5 match data. Provides interactive charts and
+ * detailed statistics breakdowns.
+ *
+ * @author iaace LLC
+ * @version 2.0.0
+ * @license AGPL-3.0
+ */
+
 "use strict";
-let match_url = undefined;
-let match_timeline_url = undefined;
-const example_param = getParameterByName("example")
-if (example_param == "4") {
-    match_url = "example-data/match/2808045821.json";
-    match_timeline_url = "example-data/timeline/2808045821.json";
-}
-else if (example_param) {
-    match_url = "example-data/match/v5.json";
-    match_timeline_url = "example-data/timeline/v5.json";
-} else {
-    match_url = getParameterByName("match");
-    match_timeline_url = getParameterByName("timeline");
-}
-const queues = {};
-for (let queue of QUEUE_GROUPS) {
-    queues[queue.id] = queue.name;
-}
-const exclude_stat_name = [
-    "playerScore0",
-    "playerScore1",
-    "playerScore2",
-    "playerScore3",
-    "playerScore4",
-    "playerScore5",
-    "playerScore6",
-    "playerScore7",
-    "playerScore8",
-    "playerScore9",
-    "item0",
-    "item1",
-    "item2",
-    "item3",
-    "item4",
-    "item5",
-    "item6",
-    "participantId"
-];
-const stat_name_translation = {
-    "longestTimeSpentLiving": "Longest Duration Alive (seconds)",
-    "spell1Casts": "Q Ability Casts",
-    "spell2Casts": "W Ability Casts",
-    "spell3Casts": "E Ability Casts",
-    "spell4Casts": "R Ability Casts",
-    "summoner1Casts": "D Summoner Casts",
-    "summoner2Casts": "F Summoner Casts",
-    "totalMinionsKilled": "Lane Minions Killed",
-    "neutralMinionsKilled": "Neutral Units Killed",
-    "timeCCingOthers": "Effective CC Duration (seconds)",
-    "totalTimeCCDealt": "Total CC Duration (seconds)",
-    "visionWardsBoughtInGame": "Control Wards Purchased",
-    "sightWardsBoughtInGame": "Sight Wards Purchased",
-    "totalUnitsHealed": "Unique Targets Healed"
+
+/**
+ * Application configuration and constants
+ */
+const CONFIG = {
+	// API endpoints and data sources
+	DDRAGON_BASE_URL: 'https://ddragon.leagueoflegends.com/cdn',
+	EXAMPLE_DATA_PATH: 'example-data',
+
+	// Chart configuration
+	DEFAULT_CHART_HEIGHT: 600,
+	MAX_SELECTOR_HEIGHT: 400,
+
+	// Performance settings
+	GRAPH_UPDATE_DELAY: 500,
+
+	// UI text and labels
+	APP_NAME: 'LoL Match Statistics Viewer',
+	ERROR_MESSAGES: {
+		NO_DATA: 'No match or timeline data provided, or the data could not be loaded. Please select an example or provide valid data sources in the URL.',
+		INVALID_JSON: 'Invalid JSON data format.',
+		NETWORK_ERROR: 'Failed to load data from the provided URL.',
+		PROCESSING_ERROR: 'Error processing match data.'
+	}
 };
 
-// Stats that should be prioritized in the dropdown for the graph
-const prioritized_stats = [
-    "kills", "deaths", "assists", "totalDamageDealtToChampions",
-    "goldEarned", "visionScore", "totalMinionsKilled", "wardsPlaced",
-    "turretKills", "totalHeal", "damageDealtToObjectives"
-];
+/**
+ * Statistical data configuration and utilities
+ */
+const STAT_CONFIG = {
+	// Stats to exclude from analysis
+	EXCLUDED_STATS: [
+		"playerScore0", "playerScore1", "playerScore2", "playerScore3", "playerScore4",
+		"playerScore5", "playerScore6", "playerScore7", "playerScore8", "playerScore9",
+		"item0", "item1", "item2", "item3", "item4", "item5", "item6", "participantId"
+	],
 
-// Stats that work well in graph format
-const graphable_stats = [
-    ...prioritized_stats,
-    "magicDamageDealtToChampions", "physicalDamageDealtToChampions", "trueDamageDealtToChampions",
-    "totalDamageTaken", "damageDealtToTurrets", "timeCCingOthers", "totalTimeCrowdControlDealt",
-    "neutralMinionsKilled", "wardsKilled", "spell1Casts", "spell2Casts", "spell3Casts", "spell4Casts"
-];
+	// Human-readable translations for stat names
+	STAT_TRANSLATIONS: {
+		"longestTimeSpentLiving": "Longest Duration Alive (seconds)",
+		"spell1Casts": "Q Ability Casts",
+		"spell2Casts": "W Ability Casts",
+		"spell3Casts": "E Ability Casts",
+		"spell4Casts": "R Ability Casts",
+		"summoner1Casts": "D Summoner Casts",
+		"summoner2Casts": "F Summoner Casts",
+		"totalMinionsKilled": "Lane Minions Killed",
+		"neutralMinionsKilled": "Neutral Units Killed",
+		"timeCCingOthers": "Effective CC Duration (seconds)",
+		"totalTimeCCDealt": "Total CC Duration (seconds)",
+		"visionWardsBoughtInGame": "Control Wards Purchased",
+		"sightWardsBoughtInGame": "Sight Wards Purchased",
+		"totalUnitsHealed": "Unique Targets Healed"
+	},
 
-// Define stat categories for grouping in the UI
-const stat_categories = [
-    {
-        name: "Damage",
-        stats: [
-            "totalDamageDealtToChampions",
-            "physicalDamageDealtToChampions", "magicDamageDealtToChampions", "trueDamageDealtToChampions",
-            "totalDamageDealt", "physicalDamageDealt", "magicDamageDealt", "trueDamageDealt",
-            "largestCriticalStrike", "damageDealtToObjectives", "damageDealtToTurrets"
-        ]
-    },
-    {
-        name: "Combat Stats",
-        stats: [
-            "champLevel",
-            "kills", "deaths", "assists",
-            "doubleKills", "tripleKills", "quadraKills", "pentaKills", "unrealKills",
-            "largestKillingSpree", "largestMultiKill", "killingSprees",
-            "longestTimeSpentLiving", "firstBloodKill", "firstBloodAssist"
-        ]
-    },
-    {
-        name: "Durability",
-        stats: [
-            "totalDamageTaken", "physicalDamageTaken", "magicalDamageTaken", "trueDamageTaken",
-            "damageSelfMitigated", "totalHeal", "totalUnitsHealed",
-            "totalDamageShieldedOnTeammates", "totalHealsOnTeammates"
-        ]
-    },
-    {
-        name: "Economy",
-        stats: [
-            "goldEarned", "goldSpent", "totalMinionsKilled", "neutralMinionsKilled"
-        ]
-    },
-    {
-        name: "Vision & Control",
-        stats: [
-            "visionScore", "wardsPlaced", "wardsKilled", "visionWardsBoughtInGame",
-            "sightWardsBoughtInGame", "timeCCingOthers", "totalTimeCrowdControlDealt",
-            "totalTimeCCDealt"
-        ]
-    },
-    {
-        name: "Objectives",
-        stats: [
-            "turretKills", "inhibitorKills", "firstTowerKill", "firstTowerAssist",
-            "firstInhibitorKill", "firstInhibitorAssist"
-        ]
-    },
-    {
-        name: "Ability Usage",
-        stats: [
-            "spell1Casts", "spell2Casts", "spell3Casts", "spell4Casts",
-            "summoner1Casts", "summoner2Casts"
-        ]
-    },
-    {
-        name: "Other",
-        stats: [] // Will be populated automatically with any stats not in other categories
-    }
-];
+	// Stats that should be prioritized in dropdowns
+	PRIORITIZED_STATS: [
+		"kills", "deaths", "assists", "totalDamageDealtToChampions",
+		"goldEarned", "visionScore", "totalMinionsKilled", "wardsPlaced",
+		"turretKills", "totalHeal", "damageDealtToObjectives"
+	],
 
-// Function to get the category for a stat
-function getStatCategory(statName) {
-    for (const category of stat_categories) {
-        if (category.stats.includes(statName)) {
-            return category.name;
-        }
-    }
-    return "Other"; // Default category for uncategorized stats
+	// Stats that work well in graph format
+	GRAPHABLE_STATS: [
+		"kills", "deaths", "assists", "totalDamageDealtToChampions",
+		"goldEarned", "visionScore", "totalMinionsKilled", "wardsPlaced",
+		"turretKills", "totalHeal", "damageDealtToObjectives",
+		"magicDamageDealtToChampions", "physicalDamageDealtToChampions", "trueDamageDealtToChampions",
+		"totalDamageTaken", "damageDealtToTurrets", "timeCCingOthers", "totalTimeCrowdControlDealt",
+		"neutralMinionsKilled", "wardsKilled", "spell1Casts", "spell2Casts", "spell3Casts", "spell4Casts"
+	],
+
+	// Organized stat categories for UI grouping
+	CATEGORIES: [
+		{
+			name: "Damage",
+			stats: [
+				"totalDamageDealtToChampions",
+				"physicalDamageDealtToChampions", "magicDamageDealtToChampions", "trueDamageDealtToChampions",
+				"totalDamageDealt", "physicalDamageDealt", "magicDamageDealt", "trueDamageDealt",
+				"largestCriticalStrike", "damageDealtToObjectives", "damageDealtToTurrets"
+			]
+		},
+		{
+			name: "Combat Stats",
+			stats: [
+				"champLevel", "kills", "deaths", "assists",
+				"doubleKills", "tripleKills", "quadraKills", "pentaKills", "unrealKills",
+				"largestKillingSpree", "largestMultiKill", "killingSprees",
+				"longestTimeSpentLiving", "firstBloodKill", "firstBloodAssist"
+			]
+		},
+		{
+			name: "Durability",
+			stats: [
+				"totalDamageTaken", "physicalDamageTaken", "magicalDamageTaken", "trueDamageTaken",
+				"damageSelfMitigated", "totalHeal", "totalUnitsHealed",
+				"totalDamageShieldedOnTeammates", "totalHealsOnTeammates"
+			]
+		},
+		{
+			name: "Economy",
+			stats: [
+				"goldEarned", "goldSpent", "totalMinionsKilled", "neutralMinionsKilled"
+			]
+		},
+		{
+			name: "Vision & Control",
+			stats: [
+				"visionScore", "wardsPlaced", "wardsKilled", "visionWardsBoughtInGame",
+				"sightWardsBoughtInGame", "timeCCingOthers", "totalTimeCrowdControlDealt",
+				"totalTimeCCDealt"
+			]
+		},
+		{
+			name: "Objectives",
+			stats: [
+				"turretKills", "inhibitorKills", "firstTowerKill", "firstTowerAssist",
+				"firstInhibitorKill", "firstInhibitorAssist"
+			]
+		},
+		{
+			name: "Ability Usage",
+			stats: [
+				"spell1Casts", "spell2Casts", "spell3Casts", "spell4Casts",
+				"summoner1Casts", "summoner2Casts"
+			]
+		},
+		{
+			name: "Other",
+			stats: [] // Populated dynamically with uncategorized stats
+		}
+	]
+};
+
+/**
+ * Region mapping for display purposes
+ */
+const REGIONS = {
+	"BR1": "BR", "EUN1": "EUNE", "EUW1": "EUW", "JP1": "JP", "KR": "KR",
+	"LA1": "LAN", "LA2": "LAS", "NA1": "NA", "OC1": "OCE", "TR1": "TR",
+	"RU": "RU", "PBE1": "PBE", "PH2": "PH", "SG2": "SG", "TH2": "TH",
+	"TW2": "TW", "VN2": "VN", "ME1": "ME"
+};
+
+/**
+ * Application state management
+ */
+class AppState {
+	constructor() {
+		this.matchUrl = null;
+		this.timelineUrl = null;
+		this.match = null;
+		this.championData = null;
+		this.spellData = null;
+		this.runeData = null;
+		this.activeDragonVersion = null;
+		this.isInitialized = false;
+	}
+
+	/**
+	 * Initialize application state from URL parameters
+	 */
+	initialize() {
+		const exampleParam = UrlUtils.getParameterByName("example");
+
+		if (exampleParam === "4") {
+			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/2808045821.json`;
+			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/2808045821.json`;
+		} else if (exampleParam) {
+			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/v5.json`;
+			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/v5.json`;
+		} else {
+			this.matchUrl = UrlUtils.getParameterByName("match");
+			this.timelineUrl = UrlUtils.getParameterByName("timeline");
+		}
+
+		this.isInitialized = true;
+	}
 }
 
-// Function to sort stats by their categories and maintain original ordering within categories
-function getSortedStats(availableStats) {
-    // Create a map of all stats by category
-    const statsByCategory = {};
+/**
+ * URL and parameter utilities
+ */
+class UrlUtils {
+	/**
+	 * Get URL parameter by name
+	 * @param {string} name - Parameter name
+	 * @param {string} url - URL to search (defaults to current page)
+	 * @returns {string|null} Parameter value or null if not found
+	 */
+	static getParameterByName(name, url = window.location.href) {
+		const escapedName = name.replace(/[\[\]]/g, "\\$&");
+		const regex = new RegExp("[?&]" + escapedName + "(=([^&#]*)|&|#|$)");
+		const results = regex.exec(url);
 
-    // Initialize all categories
-    for (const category of stat_categories) {
-        statsByCategory[category.name] = [];
-    }
+		if (!results) return null;
+		if (!results[2]) return '';
 
-    // Sort stats into categories
-    for (const statName of availableStats) {
-        const category = getStatCategory(statName);
-        statsByCategory[category].push(statName);
-    }
-
-    // For each category, sort stats in the same order they appear in stat_categories
-    for (const category of stat_categories) {
-        // Only process if this category has stats
-        if (statsByCategory[category.name].length > 0) {
-            // Create a copy of the original array to sort
-            const statsInCategory = [...statsByCategory[category.name]];
-
-            // Sort based on the order in the stat_categories definition
-            statsInCategory.sort((a, b) => {
-                // For stats in the predefined category, use the order in stat_categories
-                if (category.stats.includes(a) && category.stats.includes(b)) {
-                    return category.stats.indexOf(a) - category.stats.indexOf(b);
-                }
-                // If only one stat is in the predefined list, prioritize it
-                else if (category.stats.includes(a)) {
-                    return -1;
-                }
-                else if (category.stats.includes(b)) {
-                    return 1;
-                }
-                // For stats not in the predefined list (like new stats that were added later),
-                // sort them alphabetically at the end
-                else {
-                    const nameA = stat_name_translation[a] || camelToTitleCase(a);
-                    const nameB = stat_name_translation[b] || camelToTitleCase(b);
-                    return nameA.localeCompare(nameB);
-                }
-            });
-
-            // Replace the original array with the sorted one
-            statsByCategory[category.name] = statsInCategory;
-        }
-    }
-
-    return statsByCategory;
+		return decodeURIComponent(results[2].replace(/\+/g, " "));
+	}
 }
 
+/**
+ * Data loading and API utilities
+ */
+class DataLoader {
+	/**
+	 * Load JSON data from URL
+	 * @param {string} url - URL to load from
+	 * @param {boolean} allowNull - Whether null/undefined URLs are allowed
+	 * @returns {Promise<Object|null>} Parsed JSON data or null
+	 */
+	static async loadJSON(url, allowNull = false) {
+		if ((url === undefined || url === null) && allowNull) {
+			return null;
+		}
+
+		if (!url) {
+			throw new Error('URL is required');
+		}
+
+		try {
+			const response = await fetch(url, { method: "GET" });
+
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+			}
+
+			return await response.json();
+		} catch (error) {
+			console.error('Failed to load JSON from:', url, error);
+			throw new Error(`${CONFIG.ERROR_MESSAGES.NETWORK_ERROR}: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Load multiple data sources in parallel
+	 * @param {Array<string>} urls - Array of URLs to load
+	 * @returns {Promise<Array>} Array of loaded data
+	 */
+	static async loadMultiple(urls) {
+		const promises = urls.map(url => this.loadJSON(url, true));
+		return Promise.all(promises);
+	}
+}
+
+/**
+ * Security and validation utilities
+ */
+class SecurityUtils {
+	/**
+	 * Escape HTML characters to prevent XSS
+	 * @param {*} unsafe - Value to escape
+	 * @returns {string} HTML-escaped string
+	 */
+	static escapeHtml(unsafe) {
+		const str = String(unsafe);
+		return str
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#039;");
+	}
+
+	/**
+	 * Validate URL for safety
+	 * @param {string} url - URL to validate
+	 * @returns {boolean} True if URL appears safe
+	 */
+	static isUrlSafe(url) {
+		try {
+			const parsed = new URL(url, window.location.origin);
+			return ['http:', 'https:'].includes(parsed.protocol);
+		} catch {
+			return false;
+		}
+	}
+}
+
+/**
+ * DOM manipulation utilities
+ */
+class DOMUtils {
+	/**
+	 * Get element by ID with error handling
+	 * @param {string} id - Element ID
+	 * @returns {HTMLElement|null} Element or null if not found
+	 */
+	static getElementById(id) {
+		const element = document.getElementById(id);
+		if (!element) {
+			console.warn(`Element with ID '${id}' not found`);
+		}
+		return element;
+	}
+
+	/**
+	 * Create HTML table cell with optional CSS class
+	 * @param {*} content - Cell content
+	 * @param {string} className - CSS class name
+	 * @returns {string} HTML cell string
+	 */
+	static createCell(content = "", className = "") {
+		const escapedContent = SecurityUtils.escapeHtml(content);
+		const classAttr = className ? ` class="${SecurityUtils.escapeHtml(className)}"` : "";
+		return `<td${classAttr}>${escapedContent}</td>`;
+	}
+
+	/**
+	 * Create HTML table header cell
+	 * @param {*} content - Header content
+	 * @param {string} className - CSS class name
+	 * @returns {string} HTML header cell string
+	 */
+	static createHeaderCell(content = "", className = "") {
+		const escapedContent = SecurityUtils.escapeHtml(content);
+		const classAttr = className ? ` class="${SecurityUtils.escapeHtml(className)}"` : "";
+		return `<th${classAttr}>${escapedContent}</th>`;
+	}
+
+	/**
+	 * Create unsafe HTML cell (for images and pre-escaped content)
+	 * @param {string} content - Pre-escaped HTML content
+	 * @param {string} className - CSS class name
+	 * @returns {string} HTML cell string
+	 */
+	static createUnsafeCell(content = "", className = "") {
+		const classAttr = className ? ` class="${SecurityUtils.escapeHtml(className)}"` : "";
+		return `<td${classAttr}>${content}</td>`;
+	}
+}
+
+/**
+ * Time formatting utilities
+ */
+class TimeUtils {
+	/**
+	 * Format seconds into human-readable duration
+	 * @param {number} seconds - Duration in seconds
+	 * @returns {string} Formatted duration string
+	 */
+	static formatDuration(seconds) {
+		const totalSeconds = Math.floor(seconds);
+		const minutes = Math.floor(totalSeconds / 60) % 60;
+		const hours = Math.floor(totalSeconds / 3600) % 24;
+		const days = Math.floor(totalSeconds / 86400);
+		const secs = totalSeconds % 60;
+
+		const paddedSecs = secs.toString().padStart(2, '0');
+		const paddedMins = minutes.toString().padStart(2, '0');
+
+		if (days > 0) {
+			return `${days}d:${hours}h:${paddedMins}m:${paddedSecs}s`;
+		} else if (hours > 0) {
+			return `${hours}h:${paddedMins}m:${paddedSecs}s`;
+		} else {
+			return `${paddedMins}m:${paddedSecs}s`;
+		}
+	}
+}
+
+/**
+ * Game data and asset management
+ */
+class GameDataManager {
+	constructor(state) {
+		this.state = state;
+	}
+
+	/**
+	 * Get champion image HTML
+	 * @param {number} championId - Champion ID
+	 * @param {string} cssClass - CSS class for the image
+	 * @returns {string} HTML img element or placeholder
+	 */
+	getChampionImage(championId, cssClass = "champion-img") {
+		if (!this.state.championData) {
+			return `<div class="${cssClass}">&nbsp;</div>`;
+		}
+
+		for (const championKey in this.state.championData.data) {
+			if (this.state.championData.data[championKey].key == championId) {
+				const escapedVersion = encodeURIComponent(this.state.activeDragonVersion);
+				const escapedKey = encodeURIComponent(championKey);
+				const escapedClass = SecurityUtils.escapeHtml(cssClass);
+				return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/champion/${escapedKey}.png" alt="${SecurityUtils.escapeHtml(this.state.championData.data[championKey].name)}">`;
+			}
+		}
+
+		return `<div class="${cssClass}">&nbsp;</div>`;
+	}
+
+	/**
+	 * Get item image HTML
+	 * @param {number} itemId - Item ID
+	 * @param {string} cssClass - CSS class for the image
+	 * @returns {string} HTML img element or placeholder
+	 */
+	getItemImage(itemId, cssClass = "item-img") {
+		if (itemId === 0) {
+			return `<div class="${cssClass}">&nbsp;</div>`;
+		}
+
+		const escapedVersion = encodeURIComponent(this.state.activeDragonVersion);
+		const escapedId = encodeURIComponent(itemId);
+		const escapedClass = SecurityUtils.escapeHtml(cssClass);
+		return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/item/${escapedId}.png" alt="Item ${itemId}">`;
+	}
+
+	/**
+	 * Get summoner spell image HTML
+	 * @param {number} spellId - Summoner spell ID
+	 * @param {string} cssClass - CSS class for the image
+	 * @returns {string} HTML img element or empty string
+	 */
+	getSummonerSpellImage(spellId, cssClass = "spell-img") {
+		if (!this.state.spellData) {
+			return "";
+		}
+
+		for (const spellKey in this.state.spellData.data) {
+			if (this.state.spellData.data[spellKey].key == spellId) {
+				const escapedVersion = encodeURIComponent(this.state.activeDragonVersion);
+				const escapedId = encodeURIComponent(this.state.spellData.data[spellKey].id);
+				const escapedClass = SecurityUtils.escapeHtml(cssClass);
+				return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/spell/${escapedId}.png" alt="${SecurityUtils.escapeHtml(this.state.spellData.data[spellKey].name)}">`;
+			}
+		}
+
+		return "";
+	}
+
+	/**
+	 * Get rune image HTML
+	 * @param {number} runeId - Rune ID
+	 * @param {string} cssClass - CSS class for the image
+	 * @returns {string} HTML img element or empty string
+	 */
+	getRuneImage(runeId, cssClass = "rune-img") {
+		if (!this.state.runeData) {
+			return "";
+		}
+
+		// Search through rune trees and their slots
+		for (const runeTree of this.state.runeData) {
+			// Check main rune tree
+			if (runeTree.id === runeId) {
+				const escapedIcon = encodeURIComponent(runeTree.icon);
+				const escapedClass = SecurityUtils.escapeHtml(cssClass);
+				return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/img/${escapedIcon}" alt="${SecurityUtils.escapeHtml(runeTree.name)}">`;
+			}
+
+			// Check individual runes in slots
+			for (const slot of runeTree.slots) {
+				for (const rune of slot.runes) {
+					if (rune.id === runeId) {
+						const escapedIcon = encodeURIComponent(rune.icon);
+						const escapedClass = SecurityUtils.escapeHtml(cssClass);
+						return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/img/${escapedIcon}" alt="${SecurityUtils.escapeHtml(rune.name)}">`;
+					}
+				}
+			}
+		}
+
+		return "";
+	}
+}
+
+/**
+ * Convert camelCase to Title Case
+ */
 function camelToTitleCase(str) {
-    // Insert a space before all capital letters
-    let result = str.replace(/([A-Z])/g, ' $1');
-    // Capitalize the first letter and return the modified string
-    return result.charAt(0).toUpperCase() + result.slice(1);
+	return str
+		.replace(/([A-Z])/g, ' $1')
+		.replace(/^./, char => char.toUpperCase());
 }
+
+// Initialize application components
+const appState = new AppState();
+const gameDataManager = new GameDataManager(appState);
+
+// Queue configuration
+const QUEUE_MAP = {};
+for (const queue of QUEUE_GROUPS) {
+	QUEUE_MAP[queue.id] = queue.name;
+}
+
+// Legacy compatibility assignments
+let match_url, match_timeline_url, addv, spell_data, champion_data, rune_data;
+const queues = QUEUE_MAP;
+const exclude_stat_name = STAT_CONFIG.EXCLUDED_STATS;
+const stat_name_translation = STAT_CONFIG.STAT_TRANSLATIONS;
+const prioritized_stats = STAT_CONFIG.PRIORITIZED_STATS;
+const graphable_stats = STAT_CONFIG.GRAPHABLE_STATS;
+const stat_categories = STAT_CONFIG.CATEGORIES;
+const regions = REGIONS;
+
+// Legacy functions for backward compatibility
+function $(id) { return DOMUtils.getElementById(id); }
+function escapeHtml(unsafe) { return SecurityUtils.escapeHtml(unsafe); }
+function getParameterByName(name, url) { return UrlUtils.getParameterByName(name, url); }
+function loadJSON(url, allowNull) { return DataLoader.loadJSON(url, allowNull); }
+function standardTimestamp(seconds) { return TimeUtils.formatDuration(seconds); }
+function cellText(content, className) { return DOMUtils.createCell(content, className); }
+function cellUnsafe(content, className) { return DOMUtils.createUnsafeCell(content, className); }
+function headerText(content, className) { return DOMUtils.createHeaderCell(content, className); }
+function championIDtoImg(id, cssClass) { return gameDataManager.getChampionImage(id, cssClass); }
+function itemIDtoImg(id, cssClass) { return gameDataManager.getItemImage(id, cssClass); }
+function spellIDtoImg(id, cssClass) { return gameDataManager.getSummonerSpellImage(id, cssClass); }
+function runeIDtoImg(id, cssClass) { return gameDataManager.getRuneImage(id, cssClass); }
+
+// Initialize legacy variables
+appState.initialize();
+match_url = appState.matchUrl;
+match_timeline_url = appState.timelineUrl;
+
+// Special functions for rune cells
 const stat_value_override = {
-    "perk0": runeToCell,
-    "perk1": runeToCell,
-    "perk2": runeToCell,
-    "perk3": runeToCell,
-    "perk4": runeToCell,
-    "perk5": runeToCell,
-    "perkPrimaryStyle": runeToCell,
-    "perkSubStyle": runeToCell,
+	"perk0": runeToCell,
+	"perk1": runeToCell,
+	"perk2": runeToCell,
+	"perk3": runeToCell,
+	"perk4": runeToCell,
+	"perk5": runeToCell,
+	"perkPrimaryStyle": runeToCell,
+	"perkSubStyle": runeToCell,
 };
-const regions = {
-    "BR1": "BR",
-    "EUN1": "EUNE",
-    "EUW1": "EUW",
-    "JP1": "JP",
-    "KR": "KR",
-    "LA1": "LAN",
-    "LA2": "LAS",
-    "NA1": "NA",
-    "OC1": "OCE",
-    "TR1": "TR",
-    "RU": "RU",
-    "PBE1": "PBE",
-    "PH2": "PH",
-    "SG2": "SG",
-    "TH2": "TH",
-    "TW2": "TW",
-    "VN2": "VN",
-    "ME1": "ME"
-};
-let addv;
-let spell_data;
-let champion_data;
-let rune_data;
+
+function runeToCell(id) {
+	return cellUnsafe(runeIDtoImg(id));
+}
+
+// Main execution - maintaining original structure but using new utilities
 loadJSON(match_url).then(match_data => {
-    let match = new Match(champion_data, match_data, null, true);
-    const major_patch = match.gameVersion.substring(0, match.gameVersion.indexOf(".", match.gameVersion.indexOf(".") + 1));
-    addv = major_patch + ".1"; //active ddragon version
-    $("metadata").innerHTML = `<h1>${queues[match.queueId]}</h1>
-        <p class="m-1">${new Date(match.gameCreation).toLocaleDateString()} ${new Date(match.gameCreation).toLocaleTimeString()}</p>
-        <p class="m-1">Region: ${escapeHtml(regions[match.platformId])}, Match ID: ${escapeHtml(match.gameId)}, Patch ${escapeHtml(major_patch)}, Duration: ${standardTimestamp(match.gameDuration)}</p>`;
-    Promise.all([
-        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
-        loadJSON(match_timeline_url, true),
-        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
-        loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
-    ]).then(responses => {
-        console.log(responses);
-        champion_data = responses[0];
-        const timeline_data = responses[1];
-        spell_data = responses[2];
-        rune_data = responses[3];
-        match = new Match(champion_data, match_data, timeline_data, true);
-        console.log(match);
-        let teams = match.teams.map((team, team_index) => {
-            //____, ______, ______, Level, _____, Team #       , _____, _____, _____, _____, _____, _____, _____, _________, __, ____
-            //Rune, Spell1, Spell2, Level, Champ, Summoner Name, Item0, Item1, Item2, Item3, Item4, Item5, Item6, K / D / A, CS, Gold
-            console.log(team.bans);
-            return `<thead class="sticky"><tr>
-            ${headerText("Rune")}
-            ${headerText("Spells")}
-            ${headerText("Level")}
-            <th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
-            ${headerText(`Team ${team_index + 1} (${team.win})`)}
-            ${headerText("Items", "tal")}
-            ${headerText("K / D / A")}
-            ${headerText("CS")}
-            ${headerText("Gold")}
-            </tr></thead>${match.participants.map(p => {
-                if (p.teamId != team.teamId) return "";
-                let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
-                return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
-            <td>${runeIDtoImg(p.stats.perk0)}</td>
-            <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
-            ${cellText(p.stats.champLevel)}
-            <td>${championIDtoImg(p.championId)}</td>
-            ${cellText(pI.player.summonerName)}
-            <td class="tal">${itemIDtoImg(p.stats.item0)}
-            ${itemIDtoImg(p.stats.item1)}
-            ${itemIDtoImg(p.stats.item2)}
-            ${itemIDtoImg(p.stats.item3)}
-            ${itemIDtoImg(p.stats.item4)}
-            ${itemIDtoImg(p.stats.item5)}
-            ${itemIDtoImg(p.stats.item6, "item-img ms-5")}</td>
-            ${cellText(`${p.stats.kills} / ${p.stats.deaths} / ${p.stats.assists}`)}
-            ${cellText(p.stats.neutralMinionsKilled + p.stats.totalMinionsKilled)}
-            ${cellText(p.stats.goldEarned)}</tr>`;
-            }).join("")}`;
-        }).join("<tr><td>&nbsp;</td></tr>");
-        teams = "<table class=\"table\">" + teams + "</table>";
-        $("scoreboard").innerHTML = teams;
-        let participant_stat_props = [];
-        for (let participant_id in match.participants) {
-            for (let prop_name in match.participants[participant_id].stats) {
-                if (!exclude_stat_name.includes(prop_name) && !participant_stat_props.includes(prop_name)) {
-                    participant_stat_props.push(prop_name);
-                }
-            }
-        }
-        let stats = `<table class="table table-striped mt-5"><thead class="sticky">
-        <tr>${headerText("Summoner Name")}${match.participants.map(p => {
-            let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
-            return headerText(pI.player.summonerName);
-        }).join("")}</tr>
-        <tr>${headerText("Champion")}${match.participants.map(p => {
-            return `<th>${championIDtoImg(p.championId)}</th>`;
-        }).join("")}</tr>
-        </thead>
-        ${participant_stat_props.map(prop_name => {
-            let remapped_prop_name = camelToTitleCase(prop_name);
-            if (stat_name_translation[prop_name]) {
-                remapped_prop_name = stat_name_translation[prop_name];
-            }
-            return `<tr>${headerText(remapped_prop_name, "tal")}${match.participants.map(p => {
-                let classes = "";
-                if (p.stats[prop_name] === true) {
-                    classes = "bool-true";
-                }
-                else if (p.stats[prop_name] === false) {
-                    classes = "bool-false";
-                }
-                else if (p.stats[prop_name] === null || p.stats[prop_name] === undefined) {
-                    return cellText("");
-                }
-                if (stat_value_override[prop_name]) {
-                    return stat_value_override[prop_name](p.stats[prop_name]);
-                }
-                else {
-                    return cellText(p.stats[prop_name], classes);
-                }
-            }).join("")}</tr>`;
-        }).join("")}</table>`
-        $("player-stats").innerHTML = stats;
+	let match = new Match(champion_data, match_data, null, true);
+	const major_patch = match.gameVersion.substring(0, match.gameVersion.indexOf(".", match.gameVersion.indexOf(".") + 1));
+	addv = major_patch + ".1";
+	appState.activeDragonVersion = addv;
 
-        // Initialize the stats graph functionality
-        populateStatSelector(match);
+	$("metadata").innerHTML = `<h1>${queues[match.queueId]}</h1>
+		<p class="m-1">${new Date(match.gameCreation).toLocaleDateString()} ${new Date(match.gameCreation).toLocaleTimeString()}</p>
+		<p class="m-1">Region: ${escapeHtml(regions[match.platformId])}, Match ID: ${escapeHtml(match.gameId)}, Patch ${escapeHtml(major_patch)}, Duration: ${standardTimestamp(match.gameDuration)}</p>`;
 
-        // Add event listener for chart type selection to update the graph when chart type changes
-        $("chart-type-selector").addEventListener('change', function () {
-            const selectedStats = getSelectedStats();
-            if (selectedStats.length > 0) {
-                createMultiStatsGraph(match, selectedStats);
-            }
-        });
+	Promise.all([
+		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
+		loadJSON(match_timeline_url, true),
+		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
+		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
+	]).then(responses => {
+		console.log(responses);
+		champion_data = responses[0];
+		const timeline_data = responses[1];
+		spell_data = responses[2];
+		rune_data = responses[3];
 
-        // Add event listener for the "Sum Selections" checkbox
-        const sumSelectionsCheckbox = $("sum-selections-checkbox");
-        sumSelectionsCheckbox.addEventListener('change', function () {
-            const selectedStats = getSelectedStats();
-            if (selectedStats.length > 0) {
-                createMultiStatsGraph(match, selectedStats);
-            }
-        });
+		// Update app state
+		appState.championData = champion_data;
+		appState.spellData = spell_data;
+		appState.runeData = rune_data;
 
-        // Add event listener for the "Clear All" hyperlink
-        const clearAllLink = document.getElementById('clear-all-stats');
-        if (clearAllLink) {
-            clearAllLink.onclick = function (e) {
-                e.preventDefault();
-                document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
-                // Show message in plot area
-                const graphContainer = $("stats-graph");
-                if (graphContainer) {
-                    graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
-                }
-            };
-        }
+		match = new Match(champion_data, match_data, timeline_data, true);
+		console.log(match);
 
-        // Plot the default selected stats on page load (with a slight delay to ensure DOM is ready)
-        setTimeout(() => {
-            const selectedStats = getSelectedStats();
-            if (selectedStats.length > 0) {
-                createMultiStatsGraph(match, selectedStats);
-            }
-        }, 500);
-    }).catch(handleError);
+		let teams = match.teams.map((team, team_index) => {
+			console.log(team.bans);
+			return `<thead class="sticky"><tr>
+			${headerText("Rune")}
+			${headerText("Spells")}
+			${headerText("Level")}
+			<th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
+			${headerText(`Team ${team_index + 1} (${team.win})`)}
+			${headerText("Items", "tal")}
+			${headerText("K / D / A")}
+			${headerText("CS")}
+			${headerText("Gold")}
+			</tr></thead>${match.participants.map(p => {
+				if (p.teamId != team.teamId) return "";
+				let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
+				return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
+			<td>${runeIDtoImg(p.stats.perk0)}</td>
+			<td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
+			${cellText(p.stats.champLevel)}
+			<td>${championIDtoImg(p.championId)}</td>
+			${cellText(pI.player.summonerName)}
+			<td class="tal">${itemIDtoImg(p.stats.item0)}
+			${itemIDtoImg(p.stats.item1)}
+			${itemIDtoImg(p.stats.item2)}
+			${itemIDtoImg(p.stats.item3)}
+			${itemIDtoImg(p.stats.item4)}
+			${itemIDtoImg(p.stats.item5)}
+			${itemIDtoImg(p.stats.item6, "item-img ms-5")}</td>
+			${cellText(`${p.stats.kills} / ${p.stats.deaths} / ${p.stats.assists}`)}
+			${cellText(p.stats.neutralMinionsKilled + p.stats.totalMinionsKilled)}
+			${cellText(p.stats.goldEarned)}</tr>`;
+			}).join("")}`;
+		}).join("<tr><td>&nbsp;</td></tr>");
+		teams = "<table class=\"table\">" + teams + "</table>";
+		$("scoreboard").innerHTML = teams;
+
+		let participant_stat_props = [];
+		for (let participant_id in match.participants) {
+			for (let prop_name in match.participants[participant_id].stats) {
+				if (!exclude_stat_name.includes(prop_name) && !participant_stat_props.includes(prop_name)) {
+					participant_stat_props.push(prop_name);
+				}
+			}
+		}
+
+		let stats = `<table class="table table-striped mt-5"><thead class="sticky">
+		<tr>${headerText("Summoner Name")}${match.participants.map(p => {
+			let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
+			return headerText(pI.player.summonerName);
+		}).join("")}</tr>
+		<tr>${headerText("Champion")}${match.participants.map(p => {
+			return `<th>${championIDtoImg(p.championId)}</th>`;
+		}).join("")}</tr>
+		</thead>
+		${participant_stat_props.map(prop_name => {
+			let remapped_prop_name = camelToTitleCase(prop_name);
+			if (stat_name_translation[prop_name]) {
+				remapped_prop_name = stat_name_translation[prop_name];
+			}
+			return `<tr>${headerText(remapped_prop_name, "tal")}${match.participants.map(p => {
+				let classes = "";
+				if (p.stats[prop_name] === true) {
+					classes = "bool-true";
+				}
+				else if (p.stats[prop_name] === false) {
+					classes = "bool-false";
+				}
+				else if (p.stats[prop_name] === null || p.stats[prop_name] === undefined) {
+					return cellText("");
+				}
+				if (stat_value_override[prop_name]) {
+					return stat_value_override[prop_name](p.stats[prop_name]);
+				}
+				else {
+					return cellText(p.stats[prop_name], classes);
+				}
+			}).join("")}</tr>`;
+		}).join("")}</table>`
+		$("player-stats").innerHTML = stats;
+
+		// Initialize the stats graph functionality
+		populateStatSelector(match);
+
+		// Add event listener for chart type selection
+		$("chart-type-selector").addEventListener('change', function () {
+			const selectedStats = getSelectedStats();
+			if (selectedStats.length > 0) {
+				createMultiStatsGraph(match, selectedStats);
+			}
+		});
+
+		// Add event listener for the "Sum Selections" checkbox
+		const sumSelectionsCheckbox = $("sum-selections-checkbox");
+		sumSelectionsCheckbox.addEventListener('change', function () {
+			const selectedStats = getSelectedStats();
+			if (selectedStats.length > 0) {
+				createMultiStatsGraph(match, selectedStats);
+			}
+		});
+
+		// Add event listener for the "Clear All" hyperlink
+		const clearAllLink = document.getElementById('clear-all-stats');
+		if (clearAllLink) {
+			clearAllLink.onclick = function (e) {
+				e.preventDefault();
+				document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
+				const graphContainer = $("stats-graph");
+				if (graphContainer) {
+					graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
+				}
+			};
+		}
+
+		// Plot the default selected stats on page load
+		setTimeout(() => {
+			const selectedStats = getSelectedStats();
+			if (selectedStats.length > 0) {
+				createMultiStatsGraph(match, selectedStats);
+			}
+		}, 500);
+	}).catch(handleError);
 }).catch(handleError);
 
 // Helper function to get selected stats
 function getSelectedStats() {
-    const selectedStats = [];
-    document.querySelectorAll('.stat-checkbox:checked').forEach(checkbox => {
-        selectedStats.push(checkbox.value);
-    });
-    return selectedStats;
-}
-
-function runeToCell(id) {
-    return cellUnsafe(runeIDtoImg(id));
-}
-function cellUnsafe(text = "", classes = "") {
-    return `<td${classes == "" ? "" : ` class="${escapeHtml(classes)}"`}>${text}</td>`;
-}
-function cellText(text = "", classes = "") {
-    return `<td${classes == "" ? "" : ` class="${escapeHtml(classes)}"`}>${escapeHtml(text)}</td>`;
-}
-function headerText(text = "", classes = "") {
-    return `<th${classes == "" ? "" : ` class="${escapeHtml(classes)}"`}>${escapeHtml(text)}</th>`;
-}
-
-function $(id) {
-    return document.getElementById(id);
-}
-
-function getParameterByName(name, url) {
-    if (!url) url = window.location.href;
-    name = name.replace(/[\[\]]/g, "\\$&");
-    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-        results = regex.exec(url);
-    if (!results) return null;
-    if (!results[2]) return '';
-    return decodeURIComponent(results[2].replace(/\+/g, " "));
-}
-
-function loadJSON(url, allow_null = false) {
-    if (url === undefined || url === null && allow_null) {
-        return new Promise((resolve, reject) => {
-            resolve(null);
-        });
-    }
-    else {
-        return new Promise((resolve, reject) => {
-            let request = new Request(url, { method: "GET" });
-            fetch(request).then(response => {
-                resolve(response.json());
-            }).catch(error => {
-                console.error(error);
-                reject(error);
-            });
-        });
-    }
+	const selectedStats = [];
+	document.querySelectorAll('.stat-checkbox:checked').forEach(checkbox => {
+		selectedStats.push(checkbox.value);
+	});
+	return selectedStats;
 }
 
 function handleError(err) {
-    console.error(err);
-    // Remove spinner and show error message in scoreboard
-    var scoreboard = $("scoreboard");
-    if (scoreboard) {
-        scoreboard.innerHTML = '<div class="alert alert-danger text-center mt-5">' +
-            (err instanceof SyntaxError && /JSON/.test(err.message)
-                ? "No match or timeline data provided, or the data could not be loaded. Please select an example or provide valid data sources in the URL."
-                : escapeHtml(err.message || err)) +
-            '</div>';
-    }
-    // Optionally clear stats graph and player stats
-    var statsGraph = $("stats-graph");
-    if (statsGraph) statsGraph.innerHTML = "";
-    var playerStats = $("player-stats");
-    if (playerStats) playerStats.innerHTML = "";
+	console.error(err);
+	var scoreboard = $("scoreboard");
+	if (scoreboard) {
+		scoreboard.innerHTML = '<div class="alert alert-danger text-center mt-5">' +
+			(err instanceof SyntaxError && /JSON/.test(err.message)
+				? "No match or timeline data provided, or the data could not be loaded. Please select an example or provide valid data sources in the URL."
+				: escapeHtml(err.message || err)) +
+			'</div>';
+	}
+	var statsGraph = $("stats-graph");
+	if (statsGraph) statsGraph.innerHTML = "";
+	var playerStats = $("player-stats");
+	if (playerStats) playerStats.innerHTML = "";
 }
 
-function escapeHtml(unsafe) {
-    unsafe = unsafe + "";
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+// Function to get the category for a stat
+function getStatCategory(statName) {
+	for (const category of stat_categories) {
+		if (category.stats.includes(statName)) {
+			return category.name;
+		}
+	}
+	return "Other";
 }
 
-function championIDtoImg(id, img_class = "champion-img") {
-    for (let b in champion_data.data) {
-        if (champion_data.data[b].key == id) {
-            return `<img${img_class == "" ? "" : ` class=${escapeHtml(img_class)}`} src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/champion/${encodeURIComponent(b)}.png">`;
-        }
-    }
-    return `<div class="${img_class}">&nbsp;</div>`;
+// Function to sort stats by their categories and maintain original ordering within categories
+function getSortedStats(availableStats) {
+	const statsByCategory = {};
+
+	// Initialize all categories
+	for (const category of stat_categories) {
+		statsByCategory[category.name] = [];
+	}
+
+	// Sort stats into categories
+	for (const statName of availableStats) {
+		const category = getStatCategory(statName);
+		statsByCategory[category].push(statName);
+	}
+
+	// For each category, sort stats in the same order they appear in stat_categories
+	for (const category of stat_categories) {
+		if (statsByCategory[category.name].length > 0) {
+			const statsInCategory = [...statsByCategory[category.name]];
+
+			statsInCategory.sort((a, b) => {
+				if (category.stats.includes(a) && category.stats.includes(b)) {
+					return category.stats.indexOf(a) - category.stats.indexOf(b);
+				}
+				else if (category.stats.includes(a)) {
+					return -1;
+				}
+				else if (category.stats.includes(b)) {
+					return 1;
+				}
+				else {
+					const nameA = stat_name_translation[a] || camelToTitleCase(a);
+					const nameB = stat_name_translation[b] || camelToTitleCase(b);
+					return nameA.localeCompare(nameB);
+				}
+			});
+
+			statsByCategory[category.name] = statsInCategory;
+		}
+	}
+
+	return statsByCategory;
 }
 
-function itemIDtoImg(id, img_class = "item-img") {
-    if (id == 0) return `<div class="${img_class}">&nbsp;</div>`;
-    return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/item/${encodeURIComponent(id)}.png">`;
-}
+// Continue with remaining functions...
+// (The rest of the original functions with improved documentation and structure)
 
-function spellIDtoImg(id, img_class = "spell-img") {
-    for (let b in spell_data.data) {
-        if (spell_data.data[b].key == id) {
-            return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/${encodeURIComponent(addv)}/img/spell/${encodeURIComponent(spell_data.data[b].id)}.png">`;
-        }
-    }
-    return "";
-}
-
-function runeIDtoImg(id, img_class = "rune-img") {
-    for (let b in rune_data) {
-        if (rune_data[b].id == id) {
-            return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/img/${rune_data[b].icon}">`;
-        }
-        for (let c in rune_data[b].slots) {
-            for (let d in rune_data[b].slots[c].runes) {
-                if (rune_data[b].slots[c].runes[d].id == id) {
-                    return `<img class="${img_class}" src="https://ddragon.leagueoflegends.com/cdn/img/${rune_data[b].slots[c].runes[d].icon}">`;
-                }
-            }
-        }
-    }
-    return "";
-}
-
-function standardTimestamp(sec) {
-    let mins = Math.floor(parseInt(sec) / 60);
-    let hours = Math.floor(parseInt(mins) / 60);
-    let days = Math.floor(parseInt(hours) / 24);
-    mins = mins % 60;
-    hours = hours % 24;
-    let secs = Math.floor(parseInt(sec) % 60);
-    if (secs < 10) secs = "0" + secs;
-    if (mins < 10) mins = "0" + mins;
-    if (hours == "00" && days == 0) return `${mins}m:${secs}s`;
-    else if (days == 0) return `${hours}h:${mins}m:${secs}s`;
-    else return `${days}d:${hours}h:${mins}m:${secs}s`;
-}
-
-// Function to populate the stat selector dropdown
 function populateStatSelector(match) {
-    const statSelectorContainer = $("stat-selector").parentElement;
+	const statSelectorContainer = $("stat-selector").parentElement;
+	const oldSelector = $("stat-selector");
+	const statCheckboxContainer = document.createElement("div");
 
-    // Replace the select element with a div for checkboxes
-    const oldSelector = $("stat-selector");
-    const statCheckboxContainer = document.createElement("div");
-    statCheckboxContainer.id = "stat-checkbox-container";
-    statCheckboxContainer.className = "stat-checkbox-container overflow-auto";
-    statCheckboxContainer.style.maxHeight = "400px"; // Increased height from 300px to 400px
-    statCheckboxContainer.style.width = "100%"; // Use full width of parent container instead of fixed 300px
-    statCheckboxContainer.style.border = "1px solid #dee2e6";
-    statCheckboxContainer.style.borderRadius = "0.25rem";
-    statCheckboxContainer.style.padding = "10px";
+	statCheckboxContainer.id = "stat-checkbox-container";
+	statCheckboxContainer.className = "stat-checkbox-container overflow-auto";
+	statCheckboxContainer.style.maxHeight = "400px";
+	statCheckboxContainer.style.width = "100%";
+	statCheckboxContainer.style.border = "1px solid #dee2e6";
+	statCheckboxContainer.style.borderRadius = "0.25rem";
+	statCheckboxContainer.style.padding = "10px";
 
-    // Replace the selector with the checkbox container
-    oldSelector.parentNode.replaceChild(statCheckboxContainer, oldSelector);
+	oldSelector.parentNode.replaceChild(statCheckboxContainer, oldSelector);
 
-    // Create a list of all available stats for graphing
-    const availableStats = [];
+	const availableStats = [];
 
-    // Add prioritized stats first
-    for (const statName of prioritized_stats) {
-        if (match.participants[0].stats[statName] !== undefined) {
-            availableStats.push(statName);
-        }
-    }
+	// Add prioritized stats first
+	for (const statName of prioritized_stats) {
+		if (match.participants[0].stats[statName] !== undefined) {
+			availableStats.push(statName);
+		}
+	}
 
-    // Add other graphable stats
-    for (const statName of graphable_stats) {
-        if (!availableStats.includes(statName) && match.participants[0].stats[statName] !== undefined) {
-            availableStats.push(statName);
-        }
-    }
+	// Add other graphable stats
+	for (const statName of graphable_stats) {
+		if (!availableStats.includes(statName) && match.participants[0].stats[statName] !== undefined) {
+			availableStats.push(statName);
+		}
+	}
 
-    // Add all remaining numeric stats that aren't in the exclude list
-    for (const participant of match.participants) {
-        for (const statName in participant.stats) {
-            if (!exclude_stat_name.includes(statName) &&
-                !availableStats.includes(statName) &&
-                typeof participant.stats[statName] === 'number') {
-                availableStats.push(statName);
-            }
-        }
-    }
+	// Add all remaining numeric stats that aren't in the exclude list
+	for (const participant of match.participants) {
+		for (const statName in participant.stats) {
+			if (!exclude_stat_name.includes(statName) &&
+				!availableStats.includes(statName) &&
+				typeof participant.stats[statName] === 'number') {
+				availableStats.push(statName);
+			}
+		}
+	}
 
-    // Sort stats by categories
-    const sortedStats = getSortedStats(availableStats);
+	const sortedStats = getSortedStats(availableStats);
 
-    // Create checkboxes for each stat category
-    for (const categoryName in sortedStats) {
-        const categoryDiv = document.createElement('div');
-        categoryDiv.className = 'stat-category';
+	// Create checkboxes for each stat category
+	for (const categoryName in sortedStats) {
+		const categoryDiv = document.createElement('div');
+		categoryDiv.className = 'stat-category';
 
-        const categoryHeader = document.createElement('h5');
-        categoryHeader.textContent = categoryName;
-        categoryDiv.appendChild(categoryHeader);
+		const categoryHeader = document.createElement('h5');
+		categoryHeader.textContent = categoryName;
+		categoryDiv.appendChild(categoryHeader);
 
-        sortedStats[categoryName].forEach(statName => {
-            const checkboxDiv = document.createElement('div');
-            checkboxDiv.className = 'form-check';
+		sortedStats[categoryName].forEach(statName => {
+			const checkboxDiv = document.createElement('div');
+			checkboxDiv.className = 'form-check';
 
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'form-check-input stat-checkbox';
-            checkbox.id = `stat-${statName}`;
-            checkbox.value = statName;
-            checkbox.dataset.stat = statName;
+			const checkbox = document.createElement('input');
+			checkbox.type = 'checkbox';
+			checkbox.className = 'form-check-input stat-checkbox';
+			checkbox.id = `stat-${statName}`;
+			checkbox.value = statName;
+			checkbox.dataset.stat = statName;
 
-            // Only select totalDamageDealtToChampions by default
-            checkbox.checked = (statName === 'totalDamageDealtToChampions');
+			checkbox.checked = (statName === 'totalDamageDealtToChampions');
 
-            const label = document.createElement('label');
-            label.className = 'form-check-label';
-            label.htmlFor = `stat-${statName}`;
+			const label = document.createElement('label');
+			label.className = 'form-check-label';
+			label.htmlFor = `stat-${statName}`;
 
-            // Use translated stat name if available
-            if (stat_name_translation[statName]) {
-                label.textContent = stat_name_translation[statName];
-            } else {
-                label.textContent = camelToTitleCase(statName);
-            }
+			if (stat_name_translation[statName]) {
+				label.textContent = stat_name_translation[statName];
+			} else {
+				label.textContent = camelToTitleCase(statName);
+			}
 
-            // Add click event listener to update the plot immediately when a checkbox changes
-            checkbox.addEventListener('change', function () {
-                const selectedStats = getSelectedStats();
-                // Only update if at least one stat is selected
-                if (selectedStats.length > 0) {
-                    createMultiStatsGraph(match, selectedStats);
-                } else if (selectedStats.length === 0) {
-                    // If no stats are selected, show a brief message in the plot area
-                    const graphContainer = $("stats-graph");
-                    graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
-                }
-            });
+			checkbox.addEventListener('change', function () {
+				const selectedStats = getSelectedStats();
+				if (selectedStats.length > 0) {
+					createMultiStatsGraph(match, selectedStats);
+				} else if (selectedStats.length === 0) {
+					const graphContainer = $("stats-graph");
+					graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
+				}
+			});
 
-            checkboxDiv.appendChild(checkbox);
-            checkboxDiv.appendChild(label);
-            categoryDiv.appendChild(checkboxDiv);
-        });
+			checkboxDiv.appendChild(checkbox);
+			checkboxDiv.appendChild(label);
+			categoryDiv.appendChild(checkboxDiv);
+		});
 
-        statCheckboxContainer.appendChild(categoryDiv);
-    }
+		statCheckboxContainer.appendChild(categoryDiv);
+	}
 
-    // Add event listener for the "Sum Selections" checkbox
-    const sumSelectionsCheckbox = $("sum-selections-checkbox");
-    sumSelectionsCheckbox.addEventListener('change', function () {
-        const selectedStats = getSelectedStats();
-        if (selectedStats.length > 0) {
-            createMultiStatsGraph(match, selectedStats);
-        }
-    });
+	const sumSelectionsCheckbox = $("sum-selections-checkbox");
+	sumSelectionsCheckbox.addEventListener('change', function () {
+		const selectedStats = getSelectedStats();
+		if (selectedStats.length > 0) {
+			createMultiStatsGraph(match, selectedStats);
+		}
+	});
 
-    // Add event listener for the "Clear All" hyperlink
-    const clearAllLink = document.getElementById('clear-all-stats');
-    if (clearAllLink) {
-        clearAllLink.onclick = function (e) {
-            e.preventDefault();
-            document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
-            // Show message in plot area
-            const graphContainer = $("stats-graph");
-            if (graphContainer) {
-                graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
-            }
-        };
-    }
+	const clearAllLink = document.getElementById('clear-all-stats');
+	if (clearAllLink) {
+		clearAllLink.onclick = function (e) {
+			e.preventDefault();
+			document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
+			const graphContainer = $("stats-graph");
+			if (graphContainer) {
+				graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
+			}
+		};
+	}
 }
 
 // Function to create a multi-stats graph grouped by player
 function createMultiStatsGraph(match, selectedStats) {
-    const graphContainer = $("stats-graph");
-    const chartType = $("chart-type-selector").value;
-    const isHorizontal = chartType === "horizontal";
-    const sumSelections = $("sum-selections-checkbox").checked;
+	const graphContainer = $("stats-graph");
+	const chartType = $("chart-type-selector").value;
+	const isHorizontal = chartType === "horizontal";
+	const sumSelections = $("sum-selections-checkbox").checked;
 
-    // Collect player information
-    const players = match.participants.map(participant => {
-        const playerIdentity = match.participantIdentities.find(pI => pI.participantId === participant.participantId);
-        const playerName = playerIdentity ? playerIdentity.player.summonerName : `Player ${participant.participantId}`;
-        let champName = '';
-        let champKey = '';
+	// Collect player information
+	const players = match.participants.map(participant => {
+		const playerIdentity = match.participantIdentities.find(pI => pI.participantId === participant.participantId);
+		const playerName = playerIdentity ? playerIdentity.player.summonerName : `Player ${participant.participantId}`;
+		let champName = '';
+		let champKey = '';
 
-        // Find champion info
-        for (let key in champion_data.data) {
-            if (champion_data.data[key].key == participant.championId) {
-                champName = champion_data.data[key].name;
-                champKey = key;
-                break;
-            }
-        }
+		// Find champion info
+		for (let key in champion_data.data) {
+			if (champion_data.data[key].key == participant.championId) {
+				champName = champion_data.data[key].name;
+				champKey = key;
+				break;
+			}
+		}
 
-        // Collect stats for this player
-        const statValues = {};
-        selectedStats.forEach(statName => {
-            statValues[statName] = participant.stats[statName] || 0;
-        });
+		// Collect stats for this player
+		const statValues = {};
+		selectedStats.forEach(statName => {
+			statValues[statName] = participant.stats[statName] || 0;
+		});
 
-        return {
-            id: participant.participantId,
-            name: playerName,
-            teamId: participant.teamId,
-            champName,
-            champKey,
-            statValues
-        };
-    });
+		return {
+			id: participant.participantId,
+			name: playerName,
+			teamId: participant.teamId,
+			champName,
+			champKey,
+			statValues
+		};
+	});
 
-    // Sort players by team
-    players.sort((a, b) => a.teamId - b.teamId);
+	// Sort players by team
+	players.sort((a, b) => a.teamId - b.teamId);
 
-    // In horizontal mode, reverse the players array so they appear in reverse order on the y-axis
-    const orderedPlayers = isHorizontal ? [...players].reverse() : players;
+	const orderedPlayers = isHorizontal ? [...players].reverse() : players;
+	const traces = [];
 
-    const traces = [];
+	// Get display names for stats
+	const statDisplayNames = selectedStats.map(statName => {
+		if (stat_name_translation[statName]) {
+			return stat_name_translation[statName];
+		} else {
+			return camelToTitleCase(statName);
+		}
+	});
 
-    // Get display names for stats
-    const statDisplayNames = selectedStats.map(statName => {
-        if (stat_name_translation[statName]) {
-            return stat_name_translation[statName];
-        } else {
-            return camelToTitleCase(statName);
-        }
-    });
+	// Define color palette for different stats
+	const statColors = [
+		'rgba(64, 128, 255, 0.7)',
+		'rgba(255, 64, 64, 0.7)',
+		'rgba(60, 180, 75, 0.7)',
+		'rgba(255, 165, 0, 0.7)',
+		'rgba(128, 0, 128, 0.7)',
+		'rgba(0, 128, 128, 0.7)',
+		'rgba(255, 215, 0, 0.7)',
+		'rgba(210, 105, 30, 0.7)',
+		'rgba(169, 169, 169, 0.7)',
+		'rgba(0, 0, 0, 0.7)'
+	];
 
-    // Define color palette for different stats
-    const statColors = [
-        'rgba(64, 128, 255, 0.7)',
-        'rgba(255, 64, 64, 0.7)',
-        'rgba(60, 180, 75, 0.7)',
-        'rgba(255, 165, 0, 0.7)',
-        'rgba(128, 0, 128, 0.7)',
-        'rgba(0, 128, 128, 0.7)',
-        'rgba(255, 215, 0, 0.7)',
-        'rgba(210, 105, 30, 0.7)',
-        'rgba(169, 169, 169, 0.7)',
-        'rgba(0, 0, 0, 0.7)'
-    ];
+	const playerLabels = orderedPlayers.map(player => `${player.champName} (${player.name})`);
+	const champImages = orderedPlayers.map(player => player.champKey);
 
-    // Create player labels that include champion name and player name
-    const playerLabels = orderedPlayers.map(player => `${player.champName} (${player.name})`);
+	if (sumSelections && selectedStats.length > 0) {
+		if (selectedStats.length > 1) {
+			selectedStats.forEach((statName, statIndex) => {
+				let statDisplayName = statDisplayNames[statIndex];
+				const values = orderedPlayers.map(player => player.statValues[statName]);
+				const color = statColors[statIndex % statColors.length];
+				const borderColor = color.replace('0.7', '1.0');
 
-    // Create champion images array for axis labeling
-    const champImages = orderedPlayers.map(player => player.champKey);
+				const trace = {
+					name: statDisplayName,
+					type: 'bar',
+					x: isHorizontal ? values : champImages,
+					y: isHorizontal ? champImages : values,
+					orientation: isHorizontal ? 'h' : 'v',
+					marker: {
+						color: color,
+						line: { color: borderColor, width: 1.5 }
+					},
+					hoverinfo: 'text',
+					hovertext: orderedPlayers.map((player, i) => {
+						return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
+					})
+				};
+				traces.push(trace);
+			});
+		} else {
+			const summedValues = orderedPlayers.map(player => {
+				return selectedStats.reduce((sum, statName) => sum + player.statValues[statName], 0);
+			});
 
-    if (sumSelections && selectedStats.length > 0) {
-        // Create a single trace with summed stats
-        const summedValues = orderedPlayers.map(player => {
-            return selectedStats.reduce((sum, statName) => sum + player.statValues[statName], 0);
-        });
+			const trace = {
+				name: 'Sum of Selected Stats',
+				type: 'bar',
+				x: isHorizontal ? summedValues : champImages,
+				y: isHorizontal ? champImages : summedValues,
+				text: summedValues.map(val => val.toLocaleString()),
+				textposition: 'auto',
+				orientation: isHorizontal ? 'h' : 'v',
+				marker: {
+					color: orderedPlayers.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 0.7)' : 'rgba(255, 64, 64, 0.7)'),
+					line: {
+						color: orderedPlayers.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 1)' : 'rgba(255, 64, 64, 1)'),
+						width: 1.5
+					}
+				},
+				hoverinfo: 'text',
+				hovertext: orderedPlayers.map((player, i) => {
+					return `<b>${player.name}</b><br>${player.champName}<br>Total: ${summedValues[i].toLocaleString()}`;
+				})
+			};
+			traces.push(trace);
+		}
+	} else {
+		const orderedSelectedStats = isHorizontal ? [...selectedStats].reverse() : selectedStats;
+		const orderedStatDisplayNames = isHorizontal ? [...statDisplayNames].reverse() : statDisplayNames;
 
-        // If we have multiple stats selected, use a stacked bar chart
-        if (selectedStats.length > 1) {
-            // Create one trace per stat, but with stack group for sum representation
-            selectedStats.forEach((statName, statIndex) => {
-                // Get stat display name
-                let statDisplayName = statDisplayNames[statIndex];
+		orderedSelectedStats.forEach((statName, statIndex) => {
+			let statDisplayName = orderedStatDisplayNames[statIndex];
+			const values = orderedPlayers.map(player => player.statValues[statName]);
+			const color = statColors[statIndex % statColors.length];
+			const borderColor = color.replace('0.7', '1.0');
 
-                // Values for each player for this stat
-                const values = orderedPlayers.map(player => player.statValues[statName]);
+			const trace = {
+				name: statDisplayName,
+				type: 'bar',
+				x: isHorizontal ? values : champImages,
+				y: isHorizontal ? champImages : values,
+				text: values.map(val => val.toLocaleString()),
+				textposition: 'auto',
+				orientation: isHorizontal ? 'h' : 'v',
+				marker: {
+					color: color,
+					line: { color: borderColor, width: 1.5 }
+				},
+				hoverinfo: 'text',
+				hovertext: orderedPlayers.map((player, i) => {
+					return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
+				})
+			};
 
-                // Choose a color for this stat
-                const color = statColors[statIndex % statColors.length];
-                const borderColor = color.replace('0.7', '1.0');
+			traces.push(trace);
+		});
+	}
 
-                const trace = {
-                    name: statDisplayName,
-                    type: 'bar',
-                    x: isHorizontal ? values : champImages,
-                    y: isHorizontal ? champImages : values,
-                    orientation: isHorizontal ? 'h' : 'v',
-                    marker: {
-                        color: color,
-                        line: {
-                            color: borderColor,
-                            width: 1.5
-                        }
-                    },
-                    hoverinfo: 'text',
-                    hovertext: orderedPlayers.map((player, i) => {
-                        return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
-                    })
-                };
-                traces.push(trace);
-            });
-        } else {
-            // If only one stat, use a regular bar chart
-            const trace = {
-                name: 'Sum of Selected Stats',
-                type: 'bar',
-                x: isHorizontal ? summedValues : champImages,
-                y: isHorizontal ? champImages : summedValues,
-                text: summedValues.map(val => val.toLocaleString()),
-                textposition: 'auto',
-                orientation: isHorizontal ? 'h' : 'v',
-                marker: {
-                    color: orderedPlayers.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 0.7)' : 'rgba(255, 64, 64, 0.7)'),
-                    line: {
-                        color: orderedPlayers.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 1)' : 'rgba(255, 64, 64, 1)'),
-                        width: 1.5
-                    }
-                },
-                hoverinfo: 'text',
-                hovertext: orderedPlayers.map((player, i) => {
-                    return `<b>${player.name}</b><br>${player.champName}<br>Total: ${summedValues[i].toLocaleString()}`;
-                })
-            };
-            traces.push(trace);
-        }
-    } else {
-        // Handle normal mode (non-summed stats)
-        // For horizontal mode, reverse the order of stats to display them in a more intuitive order
-        const orderedSelectedStats = isHorizontal ? [...selectedStats].reverse() : selectedStats;
-        const orderedStatDisplayNames = isHorizontal ? [...statDisplayNames].reverse() : statDisplayNames;
+	const layout = {
+		title: 'Multiple Stats Comparison',
+		barmode: sumSelections && selectedStats.length > 1 ? 'stack' : 'group',
+		xaxis: isHorizontal ? {
+			title: 'Value'
+		} : {
+			title: 'Champions',
+			tickangle: 0,
+			tickmode: 'array',
+			tickvals: champImages,
+			ticktext: playerLabels,
+			tickfont: { size: 9 },
+			tickangle: 45
+		},
+		yaxis: isHorizontal ? {
+			title: 'Champions',
+			tickmode: 'array',
+			tickvals: champImages,
+			ticktext: playerLabels,
+			tickfont: { size: 10 }
+		} : {
+			title: 'Value'
+		},
+		margin: {
+			l: isHorizontal ? 150 : 80,
+			r: 50,
+			b: isHorizontal ? 50 : 170,
+			t: 70,
+			pad: 4
+		},
+		legend: {
+			title: { text: 'Statistics' },
+			orientation: 'h',
+			yanchor: 'bottom',
+			y: 1.02,
+			xanchor: 'right',
+			x: 1
+		},
+		images: champImages.map((champKey, i) => ({
+			source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
+			x: isHorizontal ? -0.02 : (i / champImages.length + 0.03),
+			y: isHorizontal ? (i / champImages.length) + 0.085 : -0.05,
+			xref: 'paper',
+			yref: 'paper',
+			sizex: isHorizontal ? 0.05 : 0.075,
+			sizey: isHorizontal ? 0.05 : 0.075,
+			xanchor: isHorizontal ? 'right' : 'center',
+			yanchor: isHorizontal ? 'middle' : 'top'
+		})),
+		height: 600
+	};
 
-        // Create a trace for each stat
-        orderedSelectedStats.forEach((statName, statIndex) => {
-            // Get stat display name
-            let statDisplayName = orderedStatDisplayNames[statIndex];
+	const config = {
+		responsive: true,
+		displayModeBar: true,
+		displaylogo: false,
+		toImageButtonOptions: {
+			format: 'png',
+			filename: 'LoL_Multiple_Stats_Comparison',
+			height: 500,
+			width: 700,
+			scale: 2
+		}
+	};
 
-            // Values for each player for this stat
-            const values = orderedPlayers.map(player => player.statValues[statName]);
-
-            // Choose a color for this stat
-            const color = statColors[statIndex % statColors.length];
-            const borderColor = color.replace('0.7', '1.0');
-
-            // Create the trace for this stat
-            const trace = {
-                name: statDisplayName,
-                type: 'bar',
-                // If horizontal, swap x and y
-                x: isHorizontal ? values : champImages,
-                y: isHorizontal ? champImages : values,
-                text: values.map(val => val.toLocaleString()),
-                textposition: 'auto',
-                orientation: isHorizontal ? 'h' : 'v',
-                marker: {
-                    color: color,
-                    line: {
-                        color: borderColor,
-                        width: 1.5
-                    }
-                },
-                hoverinfo: 'text',
-                hovertext: orderedPlayers.map((player, i) => {
-                    return `<b>${player.name}</b><br>${player.champName}<br>${statDisplayName}: ${values[i].toLocaleString()}`;
-                })
-            };
-
-            traces.push(trace);
-        });
-    }
-
-    // Set up the layout for the graph
-    const layout = {
-        title: 'Multiple Stats Comparison',
-        barmode: sumSelections && selectedStats.length > 1 ? 'stack' : 'group', // Stack when summing multiple stats
-        xaxis: isHorizontal ? {
-            title: 'Value'
-        } : {
-            title: 'Champions',
-            tickangle: 0,
-            tickmode: 'array',
-            tickvals: champImages,
-            ticktext: playerLabels,
-            tickfont: {
-                size: 9
-            },
-            tickangle: 45 // Angle text for readability
-        },
-        yaxis: isHorizontal ? {
-            title: 'Champions',
-            tickmode: 'array',
-            tickvals: champImages,
-            ticktext: playerLabels,
-            tickfont: {
-                size: 10
-            }
-        } : {
-            title: 'Value'
-        },
-        margin: {
-            l: isHorizontal ? 150 : 80,
-            r: 50,
-            b: isHorizontal ? 50 : 170, // Increase bottom margin to fit angled labels in vertical mode
-            t: 70,
-            pad: 4
-        },
-        legend: {
-            title: {
-                text: 'Statistics'
-            },
-            orientation: 'h',
-            yanchor: 'bottom',
-            y: 1.02,
-            xanchor: 'right',
-            x: 1
-        },
-        // Add champion images
-        images: champImages.map((champKey, i) => ({
-            source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
-            x: isHorizontal ? -0.02 : (i / champImages.length + 0.03),
-            y: isHorizontal ? (i / champImages.length) + 0.085 : -0.05,
-            xref: 'paper',
-            yref: 'paper',
-            sizex: isHorizontal ? 0.05 : 0.075,
-            sizey: isHorizontal ? 0.05 : 0.075,
-            xanchor: isHorizontal ? 'right' : 'center',
-            yanchor: isHorizontal ? 'middle' : 'top'
-        })),
-        height: 600
-    };
-
-    const config = {
-        responsive: true,
-        displayModeBar: true,
-        displaylogo: false,
-        toImageButtonOptions: {
-            format: 'png',
-            filename: 'LoL_Multiple_Stats_Comparison',
-            height: 500,
-            width: 700,
-            scale: 2
-        }
-    };
-
-    Plotly.newPlot(graphContainer, traces, layout, config);
-
-    // Update the height of the graph container
-    $("stats-graph").style.height = "600px";
+	Plotly.newPlot(graphContainer, traces, layout, config);
+	$("stats-graph").style.height = "600px";
 }
