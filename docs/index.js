@@ -741,6 +741,7 @@ loadJSON(match_url).then(match_data => {
 		$("scoreboard").innerHTML = teams;
 
 		let participant_stat_props = [];
+		// Collect all available stats from all participants (use original order for comprehensive stat collection)
 		for (let participant_id in match.participants) {
 			const participant = match.participants[participant_id];
 			const statNames = getParticipantStatNames(participant);
@@ -751,11 +752,25 @@ loadJSON(match_url).then(match_data => {
 			}
 		}
 
+		// Use same participant order as scoreboard - sorted by placement for Arena, original order for others
+		let orderedParticipants;
+		if (isArena) {
+			// For Arena matches, use the same sorting as the scoreboard
+			orderedParticipants = match.participants.slice().sort((a, b) => {
+				const aPlacement = getParticipantStat(a, 'placement') || 99;
+				const bPlacement = getParticipantStat(b, 'placement') || 99;
+				return aPlacement - bPlacement;
+			});
+		} else {
+			// For traditional matches, use original order
+			orderedParticipants = match.participants;
+		}
+
 		let stats = `<table class="table table-striped mt-5"><thead class="sticky">
-		<tr>${headerText("Summoner Name")}${match.participants.map(p => {
+		<tr>${headerText("Summoner Name")}${orderedParticipants.map(p => {
 			return headerText(getParticipantName(match, p));
 		}).join("")}</tr>
-		<tr>${headerText("Champion")}${match.participants.map(p => {
+		<tr>${headerText("Champion")}${orderedParticipants.map(p => {
 			return `<th>${championIDtoImg(p.championId)}</th>`;
 		}).join("")}</tr>
 		</thead>
@@ -764,7 +779,7 @@ loadJSON(match_url).then(match_data => {
 			if (stat_name_translation[prop_name]) {
 				remapped_prop_name = stat_name_translation[prop_name];
 			}
-			return `<tr>${headerText(remapped_prop_name, "tal")}${match.participants.map(p => {
+			return `<tr>${headerText(remapped_prop_name, "tal")}${orderedParticipants.map(p => {
 				let classes = "";
 				const statValue = getParticipantStat(p, prop_name);
 				if (statValue === true) {
@@ -1033,8 +1048,23 @@ function createMultiStatsGraph(match, selectedStats) {
 	const isHorizontal = chartType === "horizontal";
 	const sumSelections = $("sum-selections-checkbox").checked;
 
+	// Use same participant order as scoreboard and player-stats table
+	const isArena = match.queueId === 1700;
+	let orderedParticipants;
+	if (isArena) {
+		// For Arena matches, use the same sorting as the scoreboard
+		orderedParticipants = match.participants.slice().sort((a, b) => {
+			const aPlacement = getParticipantStat(a, 'placement') || 99;
+			const bPlacement = getParticipantStat(b, 'placement') || 99;
+			return aPlacement - bPlacement;
+		});
+	} else {
+		// For traditional matches, use original order
+		orderedParticipants = match.participants;
+	}
+
 	// Collect player information
-	const players = match.participants.map(participant => {
+	const players = orderedParticipants.map(participant => {
 		const playerName = getParticipantName(match, participant);
 		let champName = '';
 		let champKey = '';
