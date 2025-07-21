@@ -432,6 +432,13 @@ const QUEUE_GROUPS = [
         "id": "2020",
         "name": "SR Tutorial 3",
         "group": "Tutorial"
+    },
+
+    // Arena queues
+    {
+        "id": "1700",
+        "name": "Arena",
+        "group": "Arena"
     }
 ];
 

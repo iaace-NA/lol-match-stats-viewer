@@ -654,6 +654,16 @@ class Match {
 			spell1Id: participant.summoner1Id,
 			spell2Id: participant.summoner2Id,
 			highestAchievedSeasonTier: null,
+			// Arena-specific fields (directly on participant for Arena matches)
+			placement: participant.placement,
+			playerSubteamId: participant.playerSubteamId,
+			playerAugment1: participant.playerAugment1,
+			playerAugment2: participant.playerAugment2,
+			playerAugment3: participant.playerAugment3,
+			playerAugment4: participant.playerAugment4,
+			playerAugment5: participant.playerAugment5,
+			playerAugment6: participant.playerAugment6,
+			subteamPlacement: participant.subteamPlacement,
 			stats: this._buildLegacyStats(participant),
 			timeline: {
 				participantId: participant.participantId,
@@ -834,6 +844,10 @@ class Match {
 			summoner2Casts: participant.summoner2Casts,
 			totalDamageShieldedOnTeammates: participant.totalDamageShieldedOnTeammates,
 			totalHealsOnTeammates: participant.totalHealsOnTeammates,
+			// Arena-specific fields
+			placement: participant.placement,
+			playerSubteamId: participant.playerSubteamId,
+			subteamPlacement: participant.subteamPlacement,
 		};
 	}
 

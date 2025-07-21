@@ -180,6 +180,9 @@ class AppState {
 		if (exampleParam === "4") {
 			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/2808045821.json`;
 			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/2808045821.json`;
+		} else if (exampleParam === "a") {
+			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/arena.json`;
+			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/arena.json`;
 		} else if (exampleParam) {
 			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/v5.json`;
 			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/v5.json`;
@@ -490,6 +493,86 @@ function camelToTitleCase(str) {
 		.replace(/^./, char => char.toUpperCase());
 }
 
+/**
+ * Get participant stat value, handling both traditional matches (nested stats) and Arena matches (flat structure)
+ * @param {Object} participant - The participant object
+ * @param {string} statName - The stat property name to retrieve
+ * @returns {*} The stat value or undefined if not found
+ */
+function getParticipantStat(participant, statName) {
+	// For Arena matches, stats are directly on the participant object
+	if (participant[statName] !== undefined) {
+		return participant[statName];
+	}
+
+	// For traditional matches, stats are nested under the stats property
+	if (participant.stats && participant.stats[statName] !== undefined) {
+		return participant.stats[statName];
+	}
+
+	return undefined;
+}
+
+/**
+ * Get participant display name, handling both traditional matches and Arena matches
+ * @param {Object} match - The match object
+ * @param {Object} participant - The participant object
+ * @returns {string} The player's display name
+ */
+function getParticipantName(match, participant) {
+	// For Arena matches, player names are directly on the participant
+	if (participant.riotIdGameName) {
+		return participant.riotIdTagline ?
+			`${participant.riotIdGameName}#${participant.riotIdTagline}` :
+			participant.riotIdGameName;
+	}
+
+	// For traditional matches, use participantIdentities
+	if (match.participantIdentities) {
+		const pI = match.participantIdentities.find(pI => pI.participantId === participant.participantId);
+		if (pI && pI.player) {
+			return pI.player.summonerName || `Player ${participant.participantId}`;
+		}
+	}
+
+	return `Player ${participant.participantId}`;
+}
+
+/**
+ * Get all available stat names from a participant, handling both match formats
+ * @param {Object} participant - The participant object
+ * @returns {string[]} Array of available stat names
+ */
+function getParticipantStatNames(participant) {
+	const statNames = [];
+
+	// For Arena matches, stats are directly on the participant object
+	for (const prop in participant) {
+		if (participant.hasOwnProperty(prop) &&
+			!exclude_stat_name.includes(prop) &&
+			prop !== 'stats' && // Exclude the nested stats object itself
+			prop !== 'perks' && // Exclude complex objects
+			prop !== 'challenges' && // Exclude complex objects
+			prop !== 'missions' && // Exclude complex objects
+			typeof participant[prop] === 'number') { // Only include numeric values for stats
+			statNames.push(prop);
+		}
+	}
+
+	// For traditional matches, also include nested stats
+	if (participant.stats) {
+		for (const prop in participant.stats) {
+			if (participant.stats.hasOwnProperty(prop) &&
+				!exclude_stat_name.includes(prop) &&
+				!statNames.includes(prop)) { // Avoid duplicates
+				statNames.push(prop);
+			}
+		}
+	}
+
+	return statNames;
+}
+
 // Initialize application components
 const appState = new AppState();
 const gameDataManager = new GameDataManager(appState);
@@ -576,46 +659,93 @@ loadJSON(match_url).then(match_data => {
 		match = new Match(champion_data, match_data, timeline_data, true);
 		console.log(match);
 
-		let teams = match.teams.map((team, team_index) => {
-			console.log(team.bans);
-			return `<thead class="sticky"><tr>
+		// Check if this is an Arena match (queue 1700)
+		const isArena = match.queueId === 1700;
+
+		let teams;
+		if (isArena) {
+			// For Arena matches, display all players in one table sorted by placement
+			const sortedParticipants = match.participants.slice().sort((a, b) => {
+				const aPlacement = getParticipantStat(a, 'placement') || 99;
+				const bPlacement = getParticipantStat(b, 'placement') || 99;
+				return aPlacement - bPlacement;
+			});
+
+			teams = `<thead class="sticky"><tr>
+			${headerText("Placement")}
 			${headerText("Rune")}
 			${headerText("Spells")}
 			${headerText("Level")}
-			<th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
-			${headerText(`Team ${team_index + 1} (${team.win})`)}
+			<th>Champion</th>
+			${headerText("Player")}
 			${headerText("Items", "tal")}
 			${headerText("K / D / A")}
 			${headerText("CS")}
 			${headerText("Gold")}
-			</tr></thead>${match.participants.map(p => {
-				if (p.teamId != team.teamId) return "";
-				let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
-				return `<tr class="match-${p.stats.win ? "victory" : "defeat"}">
-			<td>${runeIDtoImg(p.stats.perk0)}</td>
+			</tr></thead>${sortedParticipants.map(p => {
+				const placement = getParticipantStat(p, 'placement');
+				return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
+			${cellText(placement ? `#${placement}` : '?')}
+			<td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
 			<td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
-			${cellText(p.stats.champLevel)}
+			${cellText(getParticipantStat(p, 'champLevel'))}
 			<td>${championIDtoImg(p.championId)}</td>
-			${cellText(pI.player.summonerName)}
-			<td class="tal">${itemIDtoImg(p.stats.item0)}
-			${itemIDtoImg(p.stats.item1)}
-			${itemIDtoImg(p.stats.item2)}
-			${itemIDtoImg(p.stats.item3)}
-			${itemIDtoImg(p.stats.item4)}
-			${itemIDtoImg(p.stats.item5)}
-			${itemIDtoImg(p.stats.item6, "item-img ms-5")}</td>
-			${cellText(`${p.stats.kills} / ${p.stats.deaths} / ${p.stats.assists}`)}
-			${cellText(p.stats.neutralMinionsKilled + p.stats.totalMinionsKilled)}
-			${cellText(p.stats.goldEarned)}</tr>`;
+			${cellText(getParticipantName(match, p))}
+			<td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
+			${itemIDtoImg(getParticipantStat(p, 'item1'))}
+			${itemIDtoImg(getParticipantStat(p, 'item2'))}
+			${itemIDtoImg(getParticipantStat(p, 'item3'))}
+			${itemIDtoImg(getParticipantStat(p, 'item4'))}
+			${itemIDtoImg(getParticipantStat(p, 'item5'))}
+			${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
+			${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
+			${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
+			${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
 			}).join("")}`;
-		}).join("<tr><td>&nbsp;</td></tr>");
+		} else {
+			// Traditional team-based matches
+			teams = match.teams.map((team, team_index) => {
+				console.log(team.bans);
+				return `<thead class="sticky"><tr>
+				${headerText("Rune")}
+				${headerText("Spells")}
+				${headerText("Level")}
+				<th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
+				${headerText(`Team ${team_index + 1} (${team.win})`)}
+				${headerText("Items", "tal")}
+				${headerText("K / D / A")}
+				${headerText("CS")}
+				${headerText("Gold")}
+				</tr></thead>${match.participants.map(p => {
+					if (p.teamId != team.teamId) return "";
+					return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
+				<td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
+				<td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
+				${cellText(getParticipantStat(p, 'champLevel'))}
+				<td>${championIDtoImg(p.championId)}</td>
+				${cellText(getParticipantName(match, p))}
+				<td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
+				${itemIDtoImg(getParticipantStat(p, 'item1'))}
+				${itemIDtoImg(getParticipantStat(p, 'item2'))}
+				${itemIDtoImg(getParticipantStat(p, 'item3'))}
+				${itemIDtoImg(getParticipantStat(p, 'item4'))}
+				${itemIDtoImg(getParticipantStat(p, 'item5'))}
+				${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
+				${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
+				${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
+				${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
+				}).join("")}`;
+			}).join("<tr><td>&nbsp;</td></tr>");
+		}
 		teams = "<table class=\"table\">" + teams + "</table>";
 		$("scoreboard").innerHTML = teams;
 
 		let participant_stat_props = [];
 		for (let participant_id in match.participants) {
-			for (let prop_name in match.participants[participant_id].stats) {
-				if (!exclude_stat_name.includes(prop_name) && !participant_stat_props.includes(prop_name)) {
+			const participant = match.participants[participant_id];
+			const statNames = getParticipantStatNames(participant);
+			for (const prop_name of statNames) {
+				if (!participant_stat_props.includes(prop_name)) {
 					participant_stat_props.push(prop_name);
 				}
 			}
@@ -623,8 +753,7 @@ loadJSON(match_url).then(match_data => {
 
 		let stats = `<table class="table table-striped mt-5"><thead class="sticky">
 		<tr>${headerText("Summoner Name")}${match.participants.map(p => {
-			let pI = match.participantIdentities.find(pI => p.participantId == pI.participantId);
-			return headerText(pI.player.summonerName);
+			return headerText(getParticipantName(match, p));
 		}).join("")}</tr>
 		<tr>${headerText("Champion")}${match.participants.map(p => {
 			return `<th>${championIDtoImg(p.championId)}</th>`;
@@ -637,20 +766,21 @@ loadJSON(match_url).then(match_data => {
 			}
 			return `<tr>${headerText(remapped_prop_name, "tal")}${match.participants.map(p => {
 				let classes = "";
-				if (p.stats[prop_name] === true) {
+				const statValue = getParticipantStat(p, prop_name);
+				if (statValue === true) {
 					classes = "bool-true";
 				}
-				else if (p.stats[prop_name] === false) {
+				else if (statValue === false) {
 					classes = "bool-false";
 				}
-				else if (p.stats[prop_name] === null || p.stats[prop_name] === undefined) {
+				else if (statValue === null || statValue === undefined) {
 					return cellText("");
 				}
 				if (stat_value_override[prop_name]) {
-					return stat_value_override[prop_name](p.stats[prop_name]);
+					return stat_value_override[prop_name](statValue);
 				}
 				else {
-					return cellText(p.stats[prop_name], classes);
+					return cellText(statValue, classes);
 				}
 			}).join("")}</tr>`;
 		}).join("")}</table>`
@@ -800,24 +930,24 @@ function populateStatSelector(match) {
 
 	// Add prioritized stats first
 	for (const statName of prioritized_stats) {
-		if (match.participants[0].stats[statName] !== undefined) {
+		if (getParticipantStat(match.participants[0], statName) !== undefined) {
 			availableStats.push(statName);
 		}
 	}
 
 	// Add other graphable stats
 	for (const statName of graphable_stats) {
-		if (!availableStats.includes(statName) && match.participants[0].stats[statName] !== undefined) {
+		if (!availableStats.includes(statName) && getParticipantStat(match.participants[0], statName) !== undefined) {
 			availableStats.push(statName);
 		}
 	}
 
 	// Add all remaining numeric stats that aren't in the exclude list
 	for (const participant of match.participants) {
-		for (const statName in participant.stats) {
-			if (!exclude_stat_name.includes(statName) &&
-				!availableStats.includes(statName) &&
-				typeof participant.stats[statName] === 'number') {
+		const participantStats = getParticipantStatNames(participant);
+		for (const statName of participantStats) {
+			if (!availableStats.includes(statName) &&
+				typeof getParticipantStat(participant, statName) === 'number') {
 				availableStats.push(statName);
 			}
 		}
@@ -905,8 +1035,7 @@ function createMultiStatsGraph(match, selectedStats) {
 
 	// Collect player information
 	const players = match.participants.map(participant => {
-		const playerIdentity = match.participantIdentities.find(pI => pI.participantId === participant.participantId);
-		const playerName = playerIdentity ? playerIdentity.player.summonerName : `Player ${participant.participantId}`;
+		const playerName = getParticipantName(match, participant);
 		let champName = '';
 		let champKey = '';
 
@@ -922,7 +1051,7 @@ function createMultiStatsGraph(match, selectedStats) {
 		// Collect stats for this player
 		const statValues = {};
 		selectedStats.forEach(statName => {
-			statValues[statName] = participant.stats[statName] || 0;
+			statValues[statName] = getParticipantStat(participant, statName) || 0;
 		});
 
 		return {
