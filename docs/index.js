@@ -45,7 +45,8 @@ const STAT_CONFIG = {
 	EXCLUDED_STATS: [
 		"playerScore0", "playerScore1", "playerScore2", "playerScore3", "playerScore4",
 		"playerScore5", "playerScore6", "playerScore7", "playerScore8", "playerScore9",
-		"item0", "item1", "item2", "item3", "item4", "item5", "item6", "participantId"
+		"item0", "item1", "item2", "item3", "item4", "item5", "item6", "participantId",
+		"teamId", "championId", "spell1Id", "spell2Id", "playerSubteamId", "subteamPlacement"
 	],
 
 	// Human-readable translations for stat names
@@ -541,10 +542,17 @@ function getParticipantName(match, participant) {
 /**
  * Get all available stat names from a participant, handling both match formats
  * @param {Object} participant - The participant object
+ * @param {boolean} isArena - Whether this is an Arena match
  * @returns {string[]} Array of available stat names
  */
-function getParticipantStatNames(participant) {
+function getParticipantStatNames(participant, isArena = false) {
 	const statNames = [];
+
+	// Arena-specific stats that should be excluded for non-Arena matches
+	const arenaOnlyStats = [
+		'placement', 'playerAugment1', 'playerAugment2', 'playerAugment3', 
+		'playerAugment4', 'playerAugment5', 'playerAugment6', 'subteamPlacement'
+	];
 
 	// For Arena matches, stats are directly on the participant object
 	for (const prop in participant) {
@@ -555,6 +563,12 @@ function getParticipantStatNames(participant) {
 			prop !== 'challenges' && // Exclude complex objects
 			prop !== 'missions' && // Exclude complex objects
 			typeof participant[prop] === 'number') { // Only include numeric values for stats
+			
+			// Skip Arena-only stats for non-Arena matches
+			if (!isArena && arenaOnlyStats.includes(prop)) {
+				continue;
+			}
+			
 			statNames.push(prop);
 		}
 	}
@@ -565,6 +579,12 @@ function getParticipantStatNames(participant) {
 			if (participant.stats.hasOwnProperty(prop) &&
 				!exclude_stat_name.includes(prop) &&
 				!statNames.includes(prop)) { // Avoid duplicates
+				
+				// Skip Arena-only stats for non-Arena matches
+				if (!isArena && arenaOnlyStats.includes(prop)) {
+					continue;
+				}
+				
 				statNames.push(prop);
 			}
 		}
@@ -744,7 +764,7 @@ loadJSON(match_url).then(match_data => {
 		// Collect all available stats from all participants (use original order for comprehensive stat collection)
 		for (let participant_id in match.participants) {
 			const participant = match.participants[participant_id];
-			const statNames = getParticipantStatNames(participant);
+			const statNames = getParticipantStatNames(participant, isArena);
 			for (const prop_name of statNames) {
 				if (!participant_stat_props.includes(prop_name)) {
 					participant_stat_props.push(prop_name);
@@ -927,6 +947,7 @@ function getSortedStats(availableStats) {
 // (The rest of the original functions with improved documentation and structure)
 
 function populateStatSelector(match) {
+	const isArena = match.queueId === 1700;
 	const statSelectorContainer = $("stat-selector").parentElement;
 	const oldSelector = $("stat-selector");
 	const statCheckboxContainer = document.createElement("div");
@@ -959,7 +980,7 @@ function populateStatSelector(match) {
 
 	// Add all remaining numeric stats that aren't in the exclude list
 	for (const participant of match.participants) {
-		const participantStats = getParticipantStatNames(participant);
+		const participantStats = getParticipantStatNames(participant, isArena);
 		for (const statName of participantStats) {
 			if (!availableStats.includes(statName) &&
 				typeof getParticipantStat(participant, statName) === 'number') {
