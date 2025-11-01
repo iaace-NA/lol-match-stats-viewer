@@ -833,7 +833,7 @@ loadJSON(match_url).then(match_data => {
 			if (stat_name_translation[prop_name]) {
 				remapped_prop_name = stat_name_translation[prop_name];
 			}
-			return `<tr>${headerText(remapped_prop_name, "tal")}${orderedParticipants.map(p => {
+			return `<tr>${cellText(remapped_prop_name, "tal fw-bold")}${orderedParticipants.map(p => {
 				let classes = "";
 				const statValue = getParticipantStat(p, prop_name);
 				if (statValue === true) {
