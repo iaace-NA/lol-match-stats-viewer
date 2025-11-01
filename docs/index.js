@@ -988,7 +988,7 @@ function populateStatSelector(match) {
 
 	statCheckboxContainer.id = "stat-checkbox-container";
 	statCheckboxContainer.className = "stat-checkbox-container overflow-auto";
-	statCheckboxContainer.style.maxHeight = "400px";
+	statCheckboxContainer.style.maxHeight = "600px";
 	statCheckboxContainer.style.width = "100%";
 	statCheckboxContainer.style.border = "1px solid #dee2e6";
 	statCheckboxContainer.style.borderRadius = "0.25rem";
@@ -1180,6 +1180,8 @@ function createMultiStatsGraph(match, selectedStats) {
 
 	const playerLabels = orderedPlayers.map(player => `${player.champName} (${player.name})`);
 	const champImages = orderedPlayers.map(player => player.champKey);
+	// Use a unique category per player to avoid overlaps when multiple players pick the same champion
+	const axisCategories = orderedPlayers.map(player => `${player.champKey}_${player.id}`);
 
 	if (sumSelections && selectedStats.length > 0) {
 		if (selectedStats.length > 1) {
@@ -1192,8 +1194,8 @@ function createMultiStatsGraph(match, selectedStats) {
 				const trace = {
 					name: statDisplayName,
 					type: 'bar',
-					x: isHorizontal ? values : champImages,
-					y: isHorizontal ? champImages : values,
+					x: isHorizontal ? values : axisCategories,
+					y: isHorizontal ? axisCategories : values,
 					orientation: isHorizontal ? 'h' : 'v',
 					marker: {
 						color: color,
@@ -1214,8 +1216,8 @@ function createMultiStatsGraph(match, selectedStats) {
 			const trace = {
 				name: 'Sum of Selected Stats',
 				type: 'bar',
-				x: isHorizontal ? summedValues : champImages,
-				y: isHorizontal ? champImages : summedValues,
+				x: isHorizontal ? summedValues : axisCategories,
+				y: isHorizontal ? axisCategories : summedValues,
 				text: summedValues.map(val => val.toLocaleString()),
 				textposition: 'auto',
 				orientation: isHorizontal ? 'h' : 'v',
@@ -1246,8 +1248,8 @@ function createMultiStatsGraph(match, selectedStats) {
 			const trace = {
 				name: statDisplayName,
 				type: 'bar',
-				x: isHorizontal ? values : champImages,
-				y: isHorizontal ? champImages : values,
+					x: isHorizontal ? values : axisCategories,
+					y: isHorizontal ? axisCategories : values,
 				text: values.map(val => val.toLocaleString()),
 				textposition: 'auto',
 				orientation: isHorizontal ? 'h' : 'v',
@@ -1268,26 +1270,26 @@ function createMultiStatsGraph(match, selectedStats) {
 	const layout = {
 		title: 'Multiple Stats Comparison',
 		barmode: sumSelections && selectedStats.length > 1 ? 'stack' : 'group',
-		xaxis: isHorizontal ? {
-			title: 'Value'
-		} : {
-			title: 'Champions',
-			tickangle: 0,
-			tickmode: 'array',
-			tickvals: champImages,
-			ticktext: playerLabels,
-			tickfont: { size: 9 },
-			tickangle: 45
-		},
-		yaxis: isHorizontal ? {
-			title: 'Champions',
-			tickmode: 'array',
-			tickvals: champImages,
-			ticktext: playerLabels,
-			tickfont: { size: 10 }
-		} : {
-			title: 'Value'
-		},
+			xaxis: isHorizontal ? {
+				title: 'Value'
+			} : {
+				title: 'Champions',
+				//tickangle: 0,
+				tickmode: 'array',
+				tickvals: axisCategories,
+				ticktext: playerLabels,
+				tickfont: { size: 9 },
+				tickangle: 45
+			},
+			yaxis: isHorizontal ? {
+				title: 'Champions',
+				tickmode: 'array',
+				tickvals: axisCategories,
+				ticktext: playerLabels,
+				tickfont: { size: 10 }
+			} : {
+				title: 'Value'
+			},
 		margin: {
 			l: isHorizontal ? 150 : 80,
 			r: 50,
@@ -1314,7 +1316,7 @@ function createMultiStatsGraph(match, selectedStats) {
 			xanchor: isHorizontal ? 'right' : 'center',
 			yanchor: isHorizontal ? 'middle' : 'top'
 		})),
-		height: 600
+		height: 800
 	};
 
 	const config = {
@@ -1331,5 +1333,5 @@ function createMultiStatsGraph(match, selectedStats) {
 	};
 
 	Plotly.newPlot(graphContainer, traces, layout, config);
-	$("stats-graph").style.height = "600px";
+	$("stats-graph").style.height = "800px";
 }
