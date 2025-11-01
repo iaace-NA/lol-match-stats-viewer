@@ -36,6 +36,7 @@ The project follows modern JavaScript best practices with:
 - `queue_groups.js` - Queue configuration and utilities
 - `index.css` - Modern, responsive styling
 - `example-data/` - Sample data for development and testing
+- `docs/arena_augments.json` - from https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json
 
 ## License
 
