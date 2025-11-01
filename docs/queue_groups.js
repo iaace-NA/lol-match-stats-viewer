@@ -19,7 +19,6 @@
  * @type {Array<{id: string|null, name: string, group: string}>}
  */
 const QUEUE_GROUPS = [
-    // Special/Other queues
     {
         "id": "0",
         "name": "Custom (Not Supported)",
@@ -31,7 +30,9 @@ const QUEUE_GROUPS = [
         "group": "Other"
     },
 
-    // Summoner's Rift queues
+
+
+
     {
         "id": "430",
         "name": "SR Blind",
@@ -40,6 +41,11 @@ const QUEUE_GROUPS = [
     {
         "id": "490",
         "name": "SR Quickplay",
+        "group": "Summoner's Rift"
+    },
+    {
+        "id": "480",
+        "name": "SR Swiftplay",
         "group": "Summoner's Rift"
     },
     {
@@ -134,6 +140,11 @@ const QUEUE_GROUPS = [
     {
         "id": "900",
         "name": "SR ARURF",
+        "group": "Summoner's Rift Special/RGM"
+    },
+    {
+        "id": "740",
+        "name": "SR ARURF Clash",
         "group": "Summoner's Rift Special/RGM"
     },
     {
@@ -434,10 +445,14 @@ const QUEUE_GROUPS = [
         "group": "Tutorial"
     },
 
-    // Arena queues
     {
         "id": "1700",
         "name": "Arena",
+        "group": "Arena"
+    },
+    {
+        "id": "1710",
+        "name": "Arena (Custom)",
         "group": "Arena"
     }
 ];
