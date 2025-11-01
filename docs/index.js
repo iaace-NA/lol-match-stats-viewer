@@ -682,7 +682,7 @@ loadJSON(match_url).then(match_data => {
 		loadJSON(match_timeline_url, true),
 		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
 		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`),
-        loadJSON("/arena_augments.json")
+        loadJSON("arena_augments.json")
 	]).then(responses => {
 		console.log(responses);
 		champion_data = responses[0];
