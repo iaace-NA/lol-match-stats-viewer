@@ -631,6 +631,7 @@ function runeIDtoImg(id, cssClass) { return gameDataManager.getRuneImage(id, css
 appState.initialize();
 match_url = appState.matchUrl;
 match_timeline_url = appState.timelineUrl;
+let arenaAugmentMap = {};
 
 // Special functions for rune cells
 const stat_value_override = {
@@ -642,10 +643,27 @@ const stat_value_override = {
 	"perk5": runeToCell,
 	"perkPrimaryStyle": runeToCell,
 	"perkSubStyle": runeToCell,
+	// Arena augment IDs → names (stats table only)
+	"playerAugment1": augmentToCell,
+	"playerAugment2": augmentToCell,
+	"playerAugment3": augmentToCell,
+	"playerAugment4": augmentToCell,
+	"playerAugment5": augmentToCell,
+	"playerAugment6": augmentToCell,
 };
 
 function runeToCell(id) {
 	return cellUnsafe(runeIDtoImg(id));
+}
+
+function augmentToCell(id) {
+	// Only display names in the stats table. 0/undefined means no augment selected.
+	if (id === 0 || id === undefined || id === null) {
+		return cellText("");
+	}
+	const aug = arenaAugmentMap ? arenaAugmentMap[id] : undefined;
+	const name = aug && aug.name ? aug.name : String(id);
+	return cellText(name);
 }
 
 // Main execution - maintaining original structure but using new utilities
@@ -663,13 +681,29 @@ loadJSON(match_url).then(match_data => {
 		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
 		loadJSON(match_timeline_url, true),
 		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
-		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`)
+		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`),
+        loadJSON("/arena_augments.json")
 	]).then(responses => {
 		console.log(responses);
 		champion_data = responses[0];
 		const timeline_data = responses[1];
 		spell_data = responses[2];
 		rune_data = responses[3];
+        const arena_augments = responses[4];
+
+        // Build Arena Augment lookup map (ID -> metadata)
+        arenaAugmentMap = {};
+        if (Array.isArray(arena_augments)) {
+            for (const aug of arena_augments) {
+                if (aug && aug.id !== undefined && aug.id !== null) {
+                    arenaAugmentMap[aug.id] = {
+                        name: aug.nameTRA || String(aug.id),
+                        icon: aug.augmentSmallIconPath || null,
+                        rarity: aug.rarity || null,
+                    };
+                }
+            }
+        }
 
 		// Update app state
 		appState.championData = champion_data;
