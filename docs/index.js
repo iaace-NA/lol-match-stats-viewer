@@ -892,15 +892,23 @@ loadJSON(match_url).then(match_data => {
 		}
 
 		// Plot the default selected stats on page load
-		setTimeout(() => {
-			const selectedStats = getSelectedStats();
-			if (selectedStats.length > 0) {
-				createMultiStatsGraph(match, selectedStats);
-			}
+		// Render as soon as the DOM has painted and containers have dimensions
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				const selectedStats = getSelectedStats();
+				if (selectedStats.length > 0) {
+					createMultiStatsGraph(match, selectedStats);
+				} else {
+					const graphContainer = $("stats-graph");
+					if (graphContainer) {
+						graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
+					}
+				}
 
-			// Render the timeline explorer after initial graph setup
-			renderTimelineExplorer(match);
-		}, 500);
+				// Render the timeline explorer after initial graph setup
+				renderTimelineExplorer(match);
+			});
+		});
 	}).catch(handleError);
 }).catch(handleError);
 
