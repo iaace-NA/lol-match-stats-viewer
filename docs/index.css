@@ -219,6 +219,34 @@ table tr:hover {
 }
 
 /* ==========================================================================
+   Champion Labels in Scoreboard and Stats Table
+   ========================================================================== */
+
+/* Scoreboard: champion name to the left of the icon */
+.champion-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.champion-cell .champion-name {
+    color: #495057;
+    white-space: nowrap;
+}
+
+/* Stats table header: champion name below the icon */
+.champion-header {
+    display: flex;
+    flex-direction: column;
+    align-items: end;
+}
+
+.champion-header .champion-name {
+    margin-top: 4px;
+    color: #495057;
+}
+
+/* ==========================================================================
    Chart and Graph Containers
    ========================================================================== */
 

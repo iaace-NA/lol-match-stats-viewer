@@ -46,7 +46,8 @@ const STAT_CONFIG = {
 		"playerScore0", "playerScore1", "playerScore2", "playerScore3", "playerScore4",
 		"playerScore5", "playerScore6", "playerScore7", "playerScore8", "playerScore9",
 		"item0", "item1", "item2", "item3", "item4", "item5", "item6", "participantId",
-		"teamId", "championId", "spell1Id", "spell2Id", "playerSubteamId", "subteamPlacement"
+		"teamId", "championId", "spell1Id", "spell2Id", "playerSubteamId", "subteamPlacement",
+        "combatPlayerScore", "objectivePlayerScore", "totalPlayerScore", "totalScoreRank"
 	],
 
 	// Human-readable translations for stat names
@@ -390,6 +391,22 @@ class GameDataManager {
 	}
 
 	/**
+	 * Get champion display name by ID
+	 * @param {number} championId
+	 * @returns {string|null}
+	 */
+	getChampionName(championId) {
+		if (!this.state.championData) return null;
+		for (const championKey in this.state.championData.data) {
+			const champ = this.state.championData.data[championKey];
+			if (champ.key == championId) {
+				return champ.name;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Get champion image HTML
 	 * @param {number} championId - Champion ID
 	 * @param {string} cssClass - CSS class for the image
@@ -728,74 +745,74 @@ loadJSON(match_url).then(match_data => {
 				return aPlacement - bPlacement;
 			});
 
-			teams = `<thead class="sticky"><tr>
-			${headerText("Placement")}
-			${headerText("Rune")}
-			${headerText("Spells")}
-			${headerText("Level")}
-			<th>Champion</th>
-			${headerText("Player")}
-			${headerText("Items", "tal")}
-			${headerText("K / D / A")}
-			${headerText("CS")}
-			${headerText("Gold")}
-			</tr></thead>${sortedParticipants.map(p => {
-				const placement = getParticipantStat(p, 'placement');
-				return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
-			${cellText(placement ? `#${placement}` : '?')}
-			<td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
-			<td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
-			${cellText(getParticipantStat(p, 'champLevel'))}
-			<td>${championIDtoImg(p.championId)}</td>
-			${cellText(getParticipantName(match, p))}
-			<td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
-			${itemIDtoImg(getParticipantStat(p, 'item1'))}
-			${itemIDtoImg(getParticipantStat(p, 'item2'))}
-			${itemIDtoImg(getParticipantStat(p, 'item3'))}
-			${itemIDtoImg(getParticipantStat(p, 'item4'))}
-			${itemIDtoImg(getParticipantStat(p, 'item5'))}
-			${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
-			${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
-			${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
-			${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
-			}).join("")}`;
-		} else {
-			// Traditional team-based matches
-			teams = match.teams.map((team, team_index) => {
-				console.log(team.bans);
-				return `<thead class="sticky"><tr>
-				${headerText("Rune")}
-				${headerText("Spells")}
-				${headerText("Level")}
-				<th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
-				${headerText(`Team ${team_index + 1} (${team.win})`)}
-				${headerText("Items", "tal")}
-				${headerText("K / D / A")}
-				${headerText("CS")}
-				${headerText("Gold")}
-				</tr></thead>${match.participants.map(p => {
-					if (p.teamId != team.teamId) return "";
-					return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
-				<td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
-				<td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
-				${cellText(getParticipantStat(p, 'champLevel'))}
-				<td>${championIDtoImg(p.championId)}</td>
-				${cellText(getParticipantName(match, p))}
-				<td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
-				${itemIDtoImg(getParticipantStat(p, 'item1'))}
-				${itemIDtoImg(getParticipantStat(p, 'item2'))}
-				${itemIDtoImg(getParticipantStat(p, 'item3'))}
-				${itemIDtoImg(getParticipantStat(p, 'item4'))}
-				${itemIDtoImg(getParticipantStat(p, 'item5'))}
-				${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
-				${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
-				${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
-				${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
-				}).join("")}`;
-			}).join("<tr><td>&nbsp;</td></tr>");
-		}
-		teams = "<table class=\"table\">" + teams + "</table>";
-		$("scoreboard").innerHTML = teams;
+            teams = `<thead class="sticky"><tr>
+            ${headerText("Placement")}
+            ${headerText("Rune")}
+            ${headerText("Spells")}
+            ${headerText("Level")}
+            <th>Champion</th>
+            ${headerText("Player")}
+            ${headerText("Items", "tal")}
+            ${headerText("K / D / A")}
+            ${headerText("CS")}
+            ${headerText("Gold")}
+            </tr></thead>${sortedParticipants.map(p => {
+                const placement = getParticipantStat(p, 'placement');
+                return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
+            ${cellText(placement ? `#${placement}` : '?')}
+            <td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
+            <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
+            ${cellText(getParticipantStat(p, 'champLevel'))}
+            <td><div class="champion-cell"><span class="champion-name">${SecurityUtils.escapeHtml(gameDataManager.getChampionName(p.championId) || '')}</span>${championIDtoImg(p.championId)}</div></td>
+            ${cellText(getParticipantName(match, p))}
+            <td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
+            ${itemIDtoImg(getParticipantStat(p, 'item1'))}
+            ${itemIDtoImg(getParticipantStat(p, 'item2'))}
+            ${itemIDtoImg(getParticipantStat(p, 'item3'))}
+            ${itemIDtoImg(getParticipantStat(p, 'item4'))}
+            ${itemIDtoImg(getParticipantStat(p, 'item5'))}
+            ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
+            ${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
+            ${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
+            ${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
+            }).join("")}`;
+        } else {
+            // Traditional team-based matches
+            teams = match.teams.map((team, team_index) => {
+                console.log(team.bans);
+                return `<thead class="sticky"><tr>
+                ${headerText("Rune")}
+                ${headerText("Spells")}
+                ${headerText("Level")}
+                <th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
+                ${headerText(`Team ${team_index + 1} (${team.win})`)}
+                ${headerText("Items", "tal")}
+                ${headerText("K / D / A")}
+                ${headerText("CS")}
+                ${headerText("Gold")}
+                </tr></thead>${match.participants.map(p => {
+                    if (p.teamId != team.teamId) return "";
+                    return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
+                <td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
+                <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
+                ${cellText(getParticipantStat(p, 'champLevel'))}
+                <td><div class="champion-cell"><span class="champion-name">${SecurityUtils.escapeHtml(gameDataManager.getChampionName(p.championId) || '')}</span>${championIDtoImg(p.championId)}</div></td>
+                ${cellText(getParticipantName(match, p))}
+                <td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
+                ${itemIDtoImg(getParticipantStat(p, 'item1'))}
+                ${itemIDtoImg(getParticipantStat(p, 'item2'))}
+                ${itemIDtoImg(getParticipantStat(p, 'item3'))}
+                ${itemIDtoImg(getParticipantStat(p, 'item4'))}
+                ${itemIDtoImg(getParticipantStat(p, 'item5'))}
+                ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
+                ${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
+                ${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
+                ${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
+                }).join("")}`;
+            }).join("<tr><td>&nbsp;</td></tr>");
+        }
+        teams = "<table class=\"table\">" + teams + "</table>";
+        $("scoreboard").innerHTML = teams;
 
 		let participant_stat_props = [];
 		// Collect all available stats from all participants (use original order for comprehensive stat collection)
@@ -823,40 +840,40 @@ loadJSON(match_url).then(match_data => {
 			orderedParticipants = match.participants;
 		}
 
-		let stats = `<table class="table table-striped mt-5"><thead class="sticky">
-		<tr>${headerText("Summoner Name")}${orderedParticipants.map(p => {
-			return headerText(getParticipantName(match, p));
-		}).join("")}</tr>
-		<tr>${headerText("Champion")}${orderedParticipants.map(p => {
-			return `<th>${championIDtoImg(p.championId)}</th>`;
-		}).join("")}</tr>
-		</thead>
-		${participant_stat_props.map(prop_name => {
-			let remapped_prop_name = camelToTitleCase(prop_name);
-			if (stat_name_translation[prop_name]) {
-				remapped_prop_name = stat_name_translation[prop_name];
-			}
-			return `<tr>${cellText(remapped_prop_name, "tal fw-bold")}${orderedParticipants.map(p => {
-				let classes = "";
-				const statValue = getParticipantStat(p, prop_name);
-				if (statValue === true) {
-					classes = "bool-true";
-				}
-				else if (statValue === false) {
-					classes = "bool-false";
-				}
-				else if (statValue === null || statValue === undefined) {
-					return cellText("");
-				}
-				if (stat_value_override[prop_name]) {
-					return stat_value_override[prop_name](statValue);
-				}
-				else {
-					return cellText(statValue, classes);
-				}
-			}).join("")}</tr>`;
-		}).join("")}</table>`
-		$("player-stats").innerHTML = stats;
+  let stats = `<table class="table table-striped mt-5"><thead class="sticky">
+  <tr>${headerText("Summoner Name")}${orderedParticipants.map(p => {
+      return headerText(getParticipantName(match, p));
+  }).join("")}</tr>
+  <tr>${headerText("Champion")}${orderedParticipants.map(p => {
+      return `<th><div class="champion-header">${championIDtoImg(p.championId)}<div class="champion-name">${SecurityUtils.escapeHtml(gameDataManager.getChampionName(p.championId) || '')}</div></div></th>`;
+  }).join("")}</tr>
+  </thead>
+  ${participant_stat_props.map(prop_name => {
+      let remapped_prop_name = camelToTitleCase(prop_name);
+      if (stat_name_translation[prop_name]) {
+          remapped_prop_name = stat_name_translation[prop_name];
+      }
+      return `<tr>${cellText(remapped_prop_name, "tal fw-bold")}${orderedParticipants.map(p => {
+          let classes = "";
+          const statValue = getParticipantStat(p, prop_name);
+          if (statValue === true) {
+              classes = "bool-true";
+          }
+          else if (statValue === false) {
+              classes = "bool-false";
+          }
+          else if (statValue === null || statValue === undefined) {
+              return cellText("");
+          }
+          if (stat_value_override[prop_name]) {
+              return stat_value_override[prop_name](statValue);
+          }
+          else {
+              return cellText(statValue, classes);
+          }
+      }).join("")}</tr>`;
+  }).join("")}</table>`
+  $("player-stats").innerHTML = stats;
 
 		// Initialize the stats graph functionality
 		populateStatSelector(match);
