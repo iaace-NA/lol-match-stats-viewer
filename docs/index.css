@@ -40,6 +40,7 @@ body {
     vertical-align: bottom;
     display: inline-block;
     border-radius: 4px;
+    border: 2px solid transparent; /* team-colored border applied via modifier classes */
     transition: transform 0.2s ease;
 }
 
@@ -92,6 +93,24 @@ img.rune-img {
     padding: 0;
     display: inline;
     border-radius: 50%;
+}
+
+/* Utility: grayscale for consumed/undone items in timeline */
+.grayscale {
+    filter: grayscale(100%);
+}
+
+/* Team-colored borders for champion icons in timeline */
+.champion-img.team-blue {
+    border-color: #0d6efd; /* Bootstrap primary */
+}
+
+.champion-img.team-red {
+    border-color: #dc3545; /* Bootstrap danger */
+}
+
+.champion-img.team-other {
+    border-color: #6c757d; /* Bootstrap secondary */
 }
 
 /* ==========================================================================
@@ -392,6 +411,42 @@ table tr:hover {
         padding: 12px;
         margin-bottom: 15px;
     }
+}
+
+/* ==========================================================================
+   Timeline Explorer
+   ========================================================================== */
+
+#timeline-explorer {
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin: 20px 0;
+    transition: all 0.3s ease;
+}
+
+#timeline-explorer:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+#timeline-explorer-list {
+    max-height: 650px; /* Make timeline scrollable if long (a little bit longer) */
+    overflow-y: auto;
+    padding-right: 6px; /* leave room for scrollbar */
+}
+
+.timeline-assists {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+/* Smaller icons for assists to reduce clutter */
+.assist-icon {
+    width: 24px;
+    height: 24px;
 }
 
 @media (max-width: 480px) {

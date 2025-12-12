@@ -184,7 +184,10 @@ class AppState {
 		} else if (exampleParam === "a") {
 			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/arena.json`;
 			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/arena.json`;
-		} else if (exampleParam) {
+		} else if (exampleParam === "5s") {
+            this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/v5.json`;
+            this.timelineUrl = null;
+        } else if (exampleParam) {
 			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/v5.json`;
 			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/v5.json`;
 		} else {
@@ -894,6 +897,9 @@ loadJSON(match_url).then(match_data => {
 			if (selectedStats.length > 0) {
 				createMultiStatsGraph(match, selectedStats);
 			}
+
+			// Render the timeline explorer after initial graph setup
+			renderTimelineExplorer(match);
 		}, 500);
 	}).catch(handleError);
 }).catch(handleError);
@@ -979,6 +985,494 @@ function getSortedStats(availableStats) {
 
 // Continue with remaining functions...
 // (The rest of the original functions with improved documentation and structure)
+
+// ===== Timeline Explorer =====
+
+// Helper: find participant by id
+function getParticipantById(match, participantId) {
+    if (!match || !match.participants) return null;
+    for (const p of match.participants) {
+        if (p.participantId === participantId) return p;
+    }
+    return null;
+}
+
+// Build a flat, chronological list of key timeline events (kills and objectives)
+function buildTimelineEvents(match) {
+    const events = [];
+    if (!match || !match.frames || !Array.isArray(match.frames)) return events;
+
+    const toSeconds = (ts) => Math.max(0, Math.floor((ts || 0) / 1000));
+    const teamName = (teamId) => teamId === 100 ? 'Blue' : teamId === 200 ? 'Red' : 'Team';
+
+    for (const frame of match.frames) {
+        if (!frame || !Array.isArray(frame.events)) continue;
+        for (const ev of frame.events) {
+            if (!ev || !ev.type) continue;
+
+            switch (ev.type) {
+                case 'CHAMPION_KILL': {
+                    const killer = getParticipantById(match, ev.killerId);
+                    const victim = getParticipantById(match, ev.victimId);
+                    const assists = Array.isArray(ev.assistingParticipantIds) ? ev.assistingParticipantIds : [];
+                    events.push({
+                        t: toSeconds(ev.timestamp),
+                        sortKey: ev.timestamp || 0,
+                        kind: 'kill',
+                        groupType: 'kill',
+                        killer,
+                        victim,
+                        assists,
+                        killerTeamId: killer ? killer.teamId : undefined,
+                        victimTeamId: victim ? victim.teamId : undefined
+                    });
+                    break;
+                }
+                case 'ITEM_PURCHASED':
+                case 'ITEM_SOLD':
+                case 'ITEM_DESTROYED':
+                case 'ITEM_UNDO':
+                case 'ITEM_TRANSFORMED': {
+                    const participant = getParticipantById(match, ev.participantId);
+                    // Map event type to human-friendly action
+                    const actionMap = {
+                        'ITEM_PURCHASED': 'purchased',
+                        'ITEM_SOLD': 'sold',
+                        'ITEM_DESTROYED': 'consumed',
+                        'ITEM_UNDO': 'undid',
+                        'ITEM_TRANSFORMED': 'transformed'
+                    };
+                    events.push({
+                        t: toSeconds(ev.timestamp),
+                        sortKey: ev.timestamp || 0,
+                        kind: 'item',
+                        groupType: 'item',
+                        participant,
+                        teamId: participant ? participant.teamId : undefined,
+                        action: actionMap[ev.type] || ev.type.toLowerCase(),
+                        itemId: ev.itemId,
+                        beforeId: ev.beforeId,
+                        afterId: ev.afterId
+                    });
+                    break;
+                }
+                case 'ELITE_MONSTER_KILL': {
+                    const killer = getParticipantById(match, ev.killerId);
+                    // Team attribution rules:
+                    // 1) Use killerTeamId when present
+                    // 2) Else, if teamId is present, the objective belongs to that team
+                    // 3) Else, fall back to killer's team when resolvable
+                    const teamId = (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
+                        ? ev.killerTeamId
+                        : (ev.teamId !== undefined && ev.teamId !== null)
+                            ? ev.teamId
+                            : (killer ? killer.teamId : undefined);
+                    events.push({
+                        t: toSeconds(ev.timestamp),
+                        sortKey: ev.timestamp || 0,
+                        kind: 'objective',
+                        groupType: 'objective',
+                        subtype: 'ELITE_MONSTER_KILL',
+                        teamId,
+                        killer,
+                        monsterType: ev.monsterType,
+                        monsterSubType: ev.monsterSubType
+                    });
+                    break;
+                }
+                case 'BUILDING_KILL': {
+                    const killer = getParticipantById(match, ev.killerId);
+                    // Apply same attribution precedence as above
+                    const teamId = (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
+                        ? ev.killerTeamId
+                        : (ev.teamId !== undefined && ev.teamId !== null)
+                            ? ev.teamId
+                            : (killer ? killer.teamId : undefined);
+                    events.push({
+                        t: toSeconds(ev.timestamp),
+                        sortKey: ev.timestamp || 0,
+                        kind: 'objective',
+                        groupType: 'building',
+                        subtype: 'BUILDING_KILL',
+                        teamId,
+                        killer,
+                        buildingType: ev.buildingType,
+                        laneType: ev.laneType,
+                        towerType: ev.towerType
+                    });
+                    break;
+                }
+                case 'INHIBITOR_KILL': {
+                    const killer = getParticipantById(match, ev.killerId);
+                    // Apply same attribution precedence as above
+                    const teamId = (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
+                        ? ev.killerTeamId
+                        : (ev.teamId !== undefined && ev.teamId !== null)
+                            ? ev.teamId
+                            : (killer ? killer.teamId : undefined);
+                    events.push({
+                        t: toSeconds(ev.timestamp),
+                        sortKey: ev.timestamp || 0,
+                        kind: 'objective',
+                        groupType: 'building',
+                        subtype: 'INHIBITOR_KILL',
+                        teamId,
+                        killer,
+                        laneType: ev.laneType
+                    });
+                    break;
+                }
+                default:
+                    // ignore other event types for concise explorer
+                    break;
+            }
+        }
+    }
+
+    // Sort by timestamp
+    events.sort((a, b) => a.sortKey - b.sortKey);
+    return events;
+}
+
+// ===== Timeline Explorer Filters =====
+function populateTimelineFilter(match) {
+    const container = $('timeline-filter');
+    if (!container) return;
+
+    // Only build once
+    if (container.dataset.ready === '1') return;
+
+    const typeSection = `
+        <div class="stat-category">
+            <h5>Event Types</h5>
+            <div class="form-check">
+                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-kill" value="kill" checked>
+                <label class="form-check-label" for="tl-type-kill">Champion Kills</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-objective" value="objective" checked>
+                <label class="form-check-label" for="tl-type-objective">Neutral Objectives</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-building" value="building" checked>
+                <label class="form-check-label" for="tl-type-building">Buildings</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-item" value="item">
+                <label class="form-check-label" for="tl-type-item">Items (purchases, sells, consumes)</label>
+            </div>
+        </div>`;
+
+    // Teams selector removed per requirements. Team toggles are now integrated in the Champions section below.
+
+    // Champions section (participants)
+    const byTeam = { 100: [], 200: [], other: [] };
+    if (match && Array.isArray(match.participants)) {
+        for (const p of match.participants) {
+            if (p.teamId === 100) byTeam[100].push(p);
+            else if (p.teamId === 200) byTeam[200].push(p);
+            else byTeam.other.push(p);
+        }
+    }
+
+    function championCheckbox(p) {
+        const id = `tl-champ-${p.participantId}`;
+        const label = `${getParticipantName(match, p)}`;
+        const teamCls = p.teamId === 100 ? 'team-blue' : p.teamId === 200 ? 'team-red' : 'team-other';
+        const icon = championIDtoImg(p.championId, `champion-img me-1 ${teamCls}`);
+        return `
+            <div class="form-check">
+                <input class="form-check-input timeline-champ" type="checkbox" id="${id}" value="${p.participantId}" data-team="${p.teamId}" checked>
+                <label class="form-check-label d-flex align-items-center" for="${id}">${icon}<span class="ms-1">${escapeHtml(label)}</span></label>
+            </div>`;
+    }
+
+    let champsHtml = '<div class="stat-category mt-3"><h5>Champions</h5>';
+    if (byTeam[100].length) {
+        champsHtml += '<div class="mb-2"><a href="#" class="tl-team-toggle badge bg-primary text-decoration-none me-2" data-team="100">Blue</a></div>';
+        champsHtml += byTeam[100].map(championCheckbox).join('');
+    }
+    if (byTeam[200].length) {
+        champsHtml += '<div class="mt-2 mb-2"><a href="#" class="tl-team-toggle badge bg-danger text-decoration-none me-2" data-team="200">Red</a></div>';
+        champsHtml += byTeam[200].map(championCheckbox).join('');
+    }
+    if (byTeam.other.length) {
+        champsHtml += '<div class="mt-2 mb-2"><span class="badge bg-secondary me-2">Other</span></div>';
+        champsHtml += byTeam.other.map(championCheckbox).join('');
+    }
+    champsHtml += '</div>';
+
+    container.innerHTML = typeSection + champsHtml;
+    container.dataset.ready = '1';
+
+    // Re-render timeline on any filter change
+    container.addEventListener('change', () => {
+        renderTimelineExplorer(match);
+    });
+
+    // Handle Blue/Red team toggles: unify then toggle all checkboxes for that team
+    container.addEventListener('click', (ev) => {
+        const toggle = ev.target.closest('.tl-team-toggle');
+        if (!toggle) return;
+        ev.preventDefault();
+        const teamId = parseInt(toggle.getAttribute('data-team'), 10);
+        const boxes = Array.from(container.querySelectorAll(`.timeline-champ[data-team="${teamId}"]`));
+        if (boxes.length === 0) return;
+        const allChecked = boxes.every(cb => cb.checked);
+        const targetState = !allChecked; // if all checked -> uncheck all; otherwise check all
+        boxes.forEach(cb => { cb.checked = targetState; });
+        // Re-render since programmatic changes may not emit change events
+        renderTimelineExplorer(match);
+    });
+}
+
+function getSelectedTimelineFilters() {
+    const types = Array.from(document.querySelectorAll('.timeline-type:checked')).map(cb => cb.value);
+    const champions = Array.from(document.querySelectorAll('.timeline-champ:checked')).map(cb => parseInt(cb.value));
+    return { types, champions };
+}
+
+function eventMatchesFilters(e, filters) {
+    // Type filter
+    if (filters.types && filters.types.length) {
+        const t = e.groupType || e.kind; // fallback
+        if (!filters.types.includes(t)) return false;
+    }
+
+    // Team filter removed per requirements; team toggling is handled via champion selections
+
+    // Champion filter
+    if (filters.champions && filters.champions.length) {
+        let participants = [];
+        if (e.kind === 'kill') {
+            if (e.killer && e.killer.participantId) participants.push(e.killer.participantId);
+            if (e.victim && e.victim.participantId) participants.push(e.victim.participantId);
+            if (Array.isArray(e.assists)) participants.push(...e.assists);
+        } else if (e.kind === 'item') {
+            if (e.participant && e.participant.participantId) participants.push(e.participant.participantId);
+        } else {
+            if (e.killer && e.killer.participantId) participants.push(e.killer.participantId);
+        }
+        if (!participants.some(pid => filters.champions.includes(pid))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Render the timeline explorer UI
+function renderTimelineExplorer(match) {
+    const list = $('timeline-explorer-list');
+    if (!list) return; // Section may not exist
+
+    // Clear current content
+    list.innerHTML = '';
+
+    if (!match || !match.frames) {
+        list.innerHTML = '<li class="list-group-item">No timeline data available for this match.</li>';
+        return;
+    }
+
+    // Ensure filters are built
+    populateTimelineFilter(match);
+
+    const events = buildTimelineEvents(match);
+    // Apply filters
+    const filters = getSelectedTimelineFilters();
+    const filtered = events.filter(e => eventMatchesFilters(e, filters));
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<li class="list-group-item">No timeline events match the selected filters.</li>';
+        return;
+    }
+
+    const badgeForTeam = (teamId) => teamId === 100 ? 'bg-primary' : teamId === 200 ? 'bg-danger' : 'bg-secondary';
+
+    for (const e of filtered) {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex align-items-center justify-content-between';
+
+        const left = document.createElement('div');
+        left.className = 'd-flex align-items-center';
+
+        const timeBadge = document.createElement('span');
+        timeBadge.className = 'badge rounded-pill bg-secondary me-3';
+        timeBadge.textContent = standardTimestamp(e.t);
+        left.appendChild(timeBadge);
+
+        if (e.kind === 'kill') {
+            // Killer image + name (with team badge) first
+            if (e.killer) {
+                const killerTeamCls = e.killerTeamId === 100 ? 'team-blue' : e.killerTeamId === 200 ? 'team-red' : 'team-other';
+                left.insertAdjacentHTML('beforeend', championIDtoImg(e.killer.championId, `champion-img ${killerTeamCls}`));
+                const kSpan = document.createElement('span');
+                kSpan.className = 'ms-2 me-2';
+                kSpan.innerHTML = `<span class="badge ${badgeForTeam(e.killerTeamId)} me-2">${e.killerTeamId === 100 ? 'Blue' : 'Red'}</span>${escapeHtml(getParticipantName(match, e.killer))}`;
+                left.appendChild(kSpan);
+            } else {
+                const unknownK = document.createElement('span');
+                unknownK.className = 'me-2';
+                unknownK.textContent = 'Someone';
+                left.appendChild(unknownK);
+            }
+
+            const actionSpan = document.createElement('span');
+            actionSpan.className = 'me-2';
+            actionSpan.textContent = 'killed';
+            left.appendChild(actionSpan);
+
+            // Victim image + name after
+            if (e.victim) {
+                const victimTeamCls = e.victimTeamId === 100 ? 'team-blue' : e.victimTeamId === 200 ? 'team-red' : 'team-other';
+                left.insertAdjacentHTML('beforeend', championIDtoImg(e.victim.championId, `champion-img ${victimTeamCls}`));
+                const vSpan = document.createElement('span');
+                vSpan.className = 'ms-2';
+                vSpan.innerHTML = `${escapeHtml(getParticipantName(match, e.victim))}`;
+                left.appendChild(vSpan);
+            } else {
+                const unknownV = document.createElement('span');
+                unknownV.className = 'ms-2';
+                unknownV.textContent = 'a champion';
+                left.appendChild(unknownV);
+            }
+
+            if (e.assists && e.assists.length > 0) {
+                const assistWrap = document.createElement('span');
+                assistWrap.className = 'timeline-assists ms-3 text-muted';
+
+                const label = document.createElement('span');
+                label.className = 'me-1';
+                label.textContent = 'Assisted by:';
+                assistWrap.appendChild(label);
+
+                for (const aId of e.assists) {
+                    const ap = getParticipantById(match, aId);
+                    if (ap) {
+                        const aTeamCls = ap.teamId === 100 ? 'team-blue' : ap.teamId === 200 ? 'team-red' : 'team-other';
+                        assistWrap.insertAdjacentHTML('beforeend', championIDtoImg(ap.championId, `champion-img assist-icon ${aTeamCls}`));
+                    }
+                }
+
+                left.appendChild(assistWrap);
+            }
+        } else if (e.kind === 'objective') {
+            const desc = document.createElement('span');
+            desc.className = 'me-2';
+
+            if (e.subtype === 'ELITE_MONSTER_KILL') {
+                // Compute neutral objective name and show it as a green badge
+                const mType = ((e.monsterType || '') + '').toUpperCase();
+                const mSub = ((e.monsterSubType || '') + '').toUpperCase();
+                let monster;
+                if (mType === 'DRAGON' && mSub) {
+                    monster = `${mSub.replace(/_/g, ' ').toLowerCase()} dragon`;
+                } else if (mType === 'RIFTHERALD' || mType === 'RIFT_HERALD') {
+                    monster = 'rift herald';
+                } else if (mType === 'BARON_NASHOR') {
+                    monster = 'baron nashor';
+                } else if (mType === 'HORDE') {
+                    monster = 'grub';
+                } else {
+                    monster = (e.monsterType || '').toString().replace(/_/g, ' ').toLowerCase();
+                }
+
+                const actionSpan = document.createElement('span');
+                actionSpan.className = 'me-2';
+                actionSpan.textContent = 'secured';
+                left.appendChild(actionSpan);
+
+                const objBadge = document.createElement('span');
+                objBadge.className = 'badge bg-success me-2';
+                objBadge.textContent = monster;
+                left.appendChild(objBadge);
+            } else if (e.subtype === 'BUILDING_KILL') {
+                const lane = (e.laneType || '').toString().replace(/_/g, ' ').toLowerCase();
+                const tower = (e.towerType || '').toString().replace(/_/g, ' ').toLowerCase();
+
+                let buildingName;
+                if ((e.buildingType || '') === 'TOWER_BUILDING') {
+                    buildingName = `${lane ? lane + ' ' : ''}${tower || 'tower'}`.trim();
+                } else if ((e.buildingType || '') === 'INHIBITOR_BUILDING') {
+                    buildingName = `${lane ? lane + ' ' : ''}inhibitor`.trim();
+                } else {
+                    buildingName = 'structure';
+                }
+
+                const actionSpan = document.createElement('span');
+                actionSpan.className = 'me-2';
+                actionSpan.textContent = 'destroyed';
+                left.appendChild(actionSpan);
+
+                const bBadge = document.createElement('span');
+                bBadge.className = 'badge bg-warning text-dark me-2';
+                bBadge.textContent = buildingName;
+                left.appendChild(bBadge);
+            } else if (e.subtype === 'INHIBITOR_KILL') {
+                const lane = (e.laneType || '').toString().replace(/_/g, ' ').toLowerCase();
+                const buildingName = `${lane ? lane + ' ' : ''}inhibitor`.trim();
+
+                const actionSpan = document.createElement('span');
+                actionSpan.className = 'me-2';
+                actionSpan.textContent = 'destroyed';
+                left.appendChild(actionSpan);
+
+                const bBadge = document.createElement('span');
+                bBadge.className = 'badge bg-warning text-dark me-2';
+                bBadge.textContent = buildingName;
+                left.appendChild(bBadge);
+            } else {
+                desc.textContent = 'captured an objective';
+                left.appendChild(desc);
+            }
+        } else if (e.kind === 'item') {
+            // Team badge
+            const badge = document.createElement('span');
+            badge.className = `badge ${badgeForTeam(e.teamId)} me-3`;
+            badge.textContent = e.teamId === 100 ? 'Blue' : e.teamId === 200 ? 'Red' : 'Team';
+            left.appendChild(badge);
+
+            // Participant
+            if (e.participant) {
+                const partTeamCls = e.teamId === 100 ? 'team-blue' : e.teamId === 200 ? 'team-red' : 'team-other';
+                left.insertAdjacentHTML('beforeend', championIDtoImg(e.participant.championId, `champion-img ${partTeamCls}`));
+                const pSpan = document.createElement('span');
+                pSpan.className = 'ms-2 me-2';
+                pSpan.textContent = getParticipantName(match, e.participant);
+                left.appendChild(pSpan);
+            }
+
+            // Action description
+            const actionSpan = document.createElement('span');
+            actionSpan.className = 'me-2 text-muted';
+            actionSpan.textContent = e.action || 'updated items';
+            left.appendChild(actionSpan);
+
+            // Item icons
+            if (e.kind === 'item' && (e.itemId || e.beforeId || e.afterId)) {
+                const isConsumed = e.action === 'consumed';
+                const isUndone = e.action === 'undid';
+                if (e.beforeId && e.afterId) {
+                    // Show transform/undo as before -> after
+                    const beforeCls = `item-img me-1${isUndone ? ' grayscale' : ''}`;
+                    left.insertAdjacentHTML('beforeend', itemIDtoImg(e.beforeId, beforeCls));
+                    const arrow = document.createElement('span');
+                    arrow.className = 'me-1 ms-1';
+                    arrow.textContent = '→';
+                    left.appendChild(arrow);
+                    const afterCls = `item-img${isUndone ? ' grayscale' : ''}`;
+                    left.insertAdjacentHTML('beforeend', itemIDtoImg(e.afterId, afterCls));
+                } else if (e.itemId) {
+                    const cls = `item-img${(isConsumed || isUndone) ? ' grayscale' : ''}`;
+                    left.insertAdjacentHTML('beforeend', itemIDtoImg(e.itemId, cls));
+                }
+            }
+        }
+
+        li.appendChild(left);
+        list.appendChild(li);
+    }
+}
 
 function populateStatSelector(match) {
 	const isArena = match.queueId === 1700;
