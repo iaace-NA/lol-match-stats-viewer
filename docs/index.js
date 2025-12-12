@@ -1066,15 +1066,17 @@ function buildTimelineEvents(match) {
                 }
                 case 'ELITE_MONSTER_KILL': {
                     const killer = getParticipantById(match, ev.killerId);
-                    // Team attribution rules:
-                    // 1) Use killerTeamId when present
-                    // 2) Else, if teamId is present, the objective belongs to that team
-                    // 3) Else, fall back to killer's team when resolvable
-                    const teamId = (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
-                        ? ev.killerTeamId
-                        : (ev.teamId !== undefined && ev.teamId !== null)
-                            ? ev.teamId
-                            : (killer ? killer.teamId : undefined);
+                    // Team attribution rules (prefer killerId when present):
+                    // 1) If killerId resolves to a participant, use killer.teamId
+                    // 2) Else, use killerTeamId when present
+                    // 3) Else, fall back to teamId
+                    const teamId = (killer && killer.teamId !== undefined)
+                        ? killer.teamId
+                        : (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
+                            ? ev.killerTeamId
+                            : (ev.teamId !== undefined && ev.teamId !== null)
+                                ? ev.teamId
+                                : undefined;
                     events.push({
                         t: toSeconds(ev.timestamp),
                         sortKey: ev.timestamp || 0,
@@ -1090,12 +1092,14 @@ function buildTimelineEvents(match) {
                 }
                 case 'BUILDING_KILL': {
                     const killer = getParticipantById(match, ev.killerId);
-                    // Apply same attribution precedence as above
-                    const teamId = (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
-                        ? ev.killerTeamId
-                        : (ev.teamId !== undefined && ev.teamId !== null)
-                            ? ev.teamId
-                            : (killer ? killer.teamId : undefined);
+                    // Prefer killerId for attribution when present
+                    const teamId = (killer && killer.teamId !== undefined)
+                        ? killer.teamId
+                        : (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
+                            ? ev.killerTeamId
+                            : (ev.teamId !== undefined && ev.teamId !== null)
+                                ? ev.teamId
+                                : undefined;
                     events.push({
                         t: toSeconds(ev.timestamp),
                         sortKey: ev.timestamp || 0,
@@ -1112,12 +1116,14 @@ function buildTimelineEvents(match) {
                 }
                 case 'INHIBITOR_KILL': {
                     const killer = getParticipantById(match, ev.killerId);
-                    // Apply same attribution precedence as above
-                    const teamId = (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
-                        ? ev.killerTeamId
-                        : (ev.teamId !== undefined && ev.teamId !== null)
-                            ? ev.teamId
-                            : (killer ? killer.teamId : undefined);
+                    // Prefer killerId for attribution when present
+                    const teamId = (killer && killer.teamId !== undefined)
+                        ? killer.teamId
+                        : (ev.killerTeamId !== undefined && ev.killerTeamId !== null)
+                            ? ev.killerTeamId
+                            : (ev.teamId !== undefined && ev.teamId !== null)
+                                ? ev.teamId
+                                : undefined;
                     events.push({
                         t: toSeconds(ev.timestamp),
                         sortKey: ev.timestamp || 0,
@@ -1301,6 +1307,22 @@ function renderTimelineExplorer(match) {
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex align-items-center justify-content-between';
 
+        // Apply a subtle background tint for the entire row based on the killer/purchaser team
+        let rowTeamId;
+        if (e.kind === 'kill') {
+            rowTeamId = e.killerTeamId;
+        } else if (e.kind === 'item') {
+            rowTeamId = e.teamId; // purchaser's team
+        } else if (e.kind === 'objective') {
+            // prefer event teamId, else killer's team if available
+            rowTeamId = (e.teamId !== undefined && e.teamId !== null) ? e.teamId : (e.killer ? e.killer.teamId : undefined);
+        }
+        if (rowTeamId === 100) {
+            li.classList.add('tl-row-blue');
+        } else if (rowTeamId === 200) {
+            li.classList.add('tl-row-red');
+        }
+
         const left = document.createElement('div');
         left.className = 'd-flex align-items-center';
 
@@ -1367,6 +1389,29 @@ function renderTimelineExplorer(match) {
         } else if (e.kind === 'objective') {
             const desc = document.createElement('span');
             desc.className = 'me-2';
+
+            // Show killer (participant) when available, otherwise show team badge
+            const effTeamId = (e.teamId !== undefined && e.teamId !== null)
+                ? e.teamId
+                : (e.killer && e.killer.teamId !== undefined)
+                    ? e.killer.teamId
+                    : undefined;
+
+            if (e.killer) {
+                const killerTeamCls = effTeamId === 100 ? 'team-blue' : effTeamId === 200 ? 'team-red' : 'team-other';
+                left.insertAdjacentHTML('beforeend', championIDtoImg(e.killer.championId, `champion-img ${killerTeamCls}`));
+                const kSpan = document.createElement('span');
+                kSpan.className = 'ms-2 me-2';
+                const badgeCls = badgeForTeam(effTeamId);
+                const badgeTxt = effTeamId === 100 ? 'Blue' : effTeamId === 200 ? 'Red' : 'Team';
+                kSpan.innerHTML = `<span class="badge ${badgeCls} me-2">${badgeTxt}</span>${escapeHtml(getParticipantName(match, e.killer))}`;
+                left.appendChild(kSpan);
+            } else if (effTeamId) {
+                const badge = document.createElement('span');
+                badge.className = `badge ${badgeForTeam(effTeamId)} me-2`;
+                badge.textContent = effTeamId === 100 ? 'Blue' : effTeamId === 200 ? 'Red' : 'Team';
+                left.appendChild(badge);
+            }
 
             if (e.subtype === 'ELITE_MONSTER_KILL') {
                 // Compute neutral objective name and show it as a green badge

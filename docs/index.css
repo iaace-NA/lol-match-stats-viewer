@@ -109,6 +109,28 @@ img.rune-img {
     border-color: #dc3545; /* Bootstrap danger */
 }
 
+/* ==========================================================================
+   Timeline row subtle team backgrounds
+   ========================================================================== */
+
+/* Very light tints to keep text legible while conveying team ownership */
+.tl-row-blue {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.tl-row-red {
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+/* Slight emphasis on hover */
+.list-group-item.tl-row-blue:hover {
+    background-color: rgba(13, 110, 253, 0.2);
+}
+
+.list-group-item.tl-row-red:hover {
+    background-color: rgba(220, 53, 69, 0.2);
+}
+
 .champion-img.team-other {
     border-color: #6c757d; /* Bootstrap secondary */
 }
