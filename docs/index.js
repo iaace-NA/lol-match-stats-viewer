@@ -179,20 +179,21 @@ class AppState {
 	initialize() {
 		const exampleParam = UrlUtils.getParameterByName("example");
 
-		if (exampleParam === "4") {
-			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/2808045821.json`;
-			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/2808045821.json`;
-		} else if (exampleParam === "a") {
-			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/arena.json`;
-			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/arena.json`;
-		} else if (exampleParam === "5s") {
-            this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/v5.json`;
-            this.timelineUrl = null;
-        } else if (exampleParam) {
-			this.matchUrl = `${CONFIG.EXAMPLE_DATA_PATH}/match/v5.json`;
-			this.timelineUrl = `${CONFIG.EXAMPLE_DATA_PATH}/timeline/v5.json`;
+		// Named example presets: map query param value -> [matchFile, timelineFile]
+		// A null timelineFile means no timeline is loaded for that preset.
+		const EXAMPLE_PRESETS = {
+			"4":  ["2808045821.json", "2808045821.json"],
+			"a":  ["arena.json",      "arena.json"],
+			"a3": ["arena3.json",     "arena3.json"],
+			"5s": ["v5.json",         null],
+		};
+
+		if (exampleParam !== null) {
+			const preset = EXAMPLE_PRESETS[exampleParam] || ["v5.json", "v5.json"];
+			this.matchUrl    = `${CONFIG.EXAMPLE_DATA_PATH}/match/${preset[0]}`;
+			this.timelineUrl = preset[1] ? `${CONFIG.EXAMPLE_DATA_PATH}/timeline/${preset[1]}` : null;
 		} else {
-			this.matchUrl = UrlUtils.getParameterByName("match");
+			this.matchUrl    = UrlUtils.getParameterByName("match");
 			this.timelineUrl = UrlUtils.getParameterByName("timeline");
 		}
 
@@ -613,6 +614,93 @@ function getParticipantStatNames(participant, isArena = false) {
 	return statNames;
 }
 
+/**
+ * Determine whether a match is an Arena match.
+ * Covers classic Arena (queue 1700) and Arena 3x6 (queue 1750),
+ * plus any future Arena queues that expose subteam data.
+ * @param {Object} match - The match object
+ * @returns {boolean} True if the match should be rendered as Arena
+ */
+function isArenaMatch(match) {
+	if (!match) return false;
+	if (match.queueId === 1700 || match.queueId === 1750) {
+		return true;
+	}
+	// Fallback: detect Arena by the presence of *meaningful* subteam data on
+	// participants. Modern v5 payloads include playerSubteamId/subteamPlacement
+	// defaulted to 0 for every queue, so a value of 0 must not count as Arena.
+	if (Array.isArray(match.participants)) {
+		return match.participants.some(p => {
+			const subId = getParticipantStat(p, 'playerSubteamId');
+			const subPlace = getParticipantStat(p, 'subteamPlacement');
+			return (subId !== undefined && subId !== null && subId !== 0) ||
+				(subPlace !== undefined && subPlace !== null && subPlace !== 0);
+		});
+	}
+	return false;
+}
+
+/**
+ * Group Arena participants into subteams (duos for 2x8, trios for 3x6).
+ * Subteams are ordered by their placement (1st, 2nd, ...) and, within a
+ * subteam, participants keep their original relative order.
+ * @param {Object} match - The match object
+ * @returns {Array<{subteamId: number, placement: number, win: boolean, participants: Object[]}>}
+ */
+function getArenaSubteams(match) {
+	const groups = new Map();
+	const order = [];
+
+	(match.participants || []).forEach((p, index) => {
+		// Group by subteam id, falling back to placement so that players are
+		// still grouped sensibly even if subteam ids are missing.
+		let key = getParticipantStat(p, 'playerSubteamId');
+		if (key === undefined || key === null) {
+			key = getParticipantStat(p, 'subteamPlacement');
+		}
+		if (key === undefined || key === null) {
+			key = getParticipantStat(p, 'placement');
+		}
+		if (key === undefined || key === null) {
+			key = `p${index}`;
+		}
+
+		if (!groups.has(key)) {
+			const placement = getParticipantStat(p, 'subteamPlacement')
+				|| getParticipantStat(p, 'placement')
+				|| 99;
+			groups.set(key, {
+				subteamId: key,
+				placement,
+				win: !!getParticipantStat(p, 'win'),
+				participants: []
+			});
+			order.push(key);
+		}
+		groups.get(key).participants.push(p);
+	});
+
+	const subteams = order.map(key => groups.get(key));
+	subteams.sort((a, b) => a.placement - b.placement);
+	return subteams;
+}
+
+/**
+ * Flatten Arena subteams into a single participant list following the same
+ * ordering used by the scoreboard (subteam placement, then in-subteam order).
+ * @param {Object} match - The match object
+ * @returns {Object[]} Ordered participant list
+ */
+function getArenaOrderedParticipants(match) {
+	const ordered = [];
+	for (const subteam of getArenaSubteams(match)) {
+		for (const p of subteam.participants) {
+			ordered.push(p);
+		}
+	}
+	return ordered;
+}
+
 // Initialize application components
 const appState = new AppState();
 const gameDataManager = new GameDataManager(appState);
@@ -733,33 +821,35 @@ loadJSON(match_url).then(match_data => {
 		match = new Match(champion_data, match_data, timeline_data, true);
 		console.log(match);
 
-		// Check if this is an Arena match (queue 1700)
-		const isArena = match.queueId === 1700;
+		// Check if this is an Arena match (queue 1700 = 2x8, queue 1750 = 3x6)
+		const isArena = isArenaMatch(match);
 
 		let teams;
 		if (isArena) {
-			// For Arena matches, display all players in one table sorted by placement
-			const sortedParticipants = match.participants.slice().sort((a, b) => {
-				const aPlacement = getParticipantStat(a, 'placement') || 99;
-				const bPlacement = getParticipantStat(b, 'placement') || 99;
-				return aPlacement - bPlacement;
-			});
+			// For Arena matches, group players into their subteams (duos for 2x8,
+			// trios for 3x6) and render one section per subteam ordered by placement.
+			const subteams = getArenaSubteams(match);
+			const ordinal = (n) => {
+				const s = ["th", "st", "nd", "rd"];
+				const v = n % 100;
+				return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+			};
 
-            teams = `<thead class="sticky"><tr>
-            ${headerText("Placement")}
+            teams = subteams.map(subteam => {
+                const placement = subteam.placement && subteam.placement !== 99 ? subteam.placement : null;
+                const placementLabel = placement ? `${ordinal(placement)} Place` : 'Placement ?';
+                return `<thead class="sticky"><tr>
             ${headerText("Rune")}
             ${headerText("Spells")}
             ${headerText("Level")}
             <th>Champion</th>
-            ${headerText("Player")}
+            ${headerText(placementLabel)}
             ${headerText("Items", "tal")}
             ${headerText("K / D / A")}
             ${headerText("CS")}
             ${headerText("Gold")}
-            </tr></thead>${sortedParticipants.map(p => {
-                const placement = getParticipantStat(p, 'placement');
+            </tr></thead>${subteam.participants.map(p => {
                 return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
-            ${cellText(placement ? `#${placement}` : '?')}
             <td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
             <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
             ${cellText(getParticipantStat(p, 'champLevel'))}
@@ -776,6 +866,7 @@ loadJSON(match_url).then(match_data => {
             ${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
             ${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
             }).join("")}`;
+            }).join("<tr><td>&nbsp;</td></tr>");
         } else {
             // Traditional team-based matches
             teams = match.teams.map((team, team_index) => {
@@ -829,12 +920,8 @@ loadJSON(match_url).then(match_data => {
 		// Use same participant order as scoreboard - sorted by placement for Arena, original order for others
 		let orderedParticipants;
 		if (isArena) {
-			// For Arena matches, use the same sorting as the scoreboard
-			orderedParticipants = match.participants.slice().sort((a, b) => {
-				const aPlacement = getParticipantStat(a, 'placement') || 99;
-				const bPlacement = getParticipantStat(b, 'placement') || 99;
-				return aPlacement - bPlacement;
-			});
+			// For Arena matches, group by subteam and order by placement (same as scoreboard)
+			orderedParticipants = getArenaOrderedParticipants(match);
 		} else {
 			// For traditional matches, use original order
 			orderedParticipants = match.participants;
@@ -1545,7 +1632,7 @@ function renderTimelineExplorer(match) {
 }
 
 function populateStatSelector(match) {
-	const isArena = match.queueId === 1700;
+	const isArena = isArenaMatch(match);
 	const statSelectorContainer = $("stat-selector").parentElement;
 	const oldSelector = $("stat-selector");
 	const statCheckboxContainer = document.createElement("div");
@@ -1668,15 +1755,11 @@ function createMultiStatsGraph(match, selectedStats) {
 	const sumSelections = $("sum-selections-checkbox").checked;
 
 	// Use same participant order as scoreboard and player-stats table
-	const isArena = match.queueId === 1700;
+	const isArena = isArenaMatch(match);
 	let orderedParticipants;
 	if (isArena) {
-		// For Arena matches, use the same sorting as the scoreboard
-		orderedParticipants = match.participants.slice().sort((a, b) => {
-			const aPlacement = getParticipantStat(a, 'placement') || 99;
-			const bPlacement = getParticipantStat(b, 'placement') || 99;
-			return aPlacement - bPlacement;
-		});
+		// For Arena matches, group by subteam and order by placement (same as scoreboard)
+		orderedParticipants = getArenaOrderedParticipants(match);
 	} else {
 		// For traditional matches, use original order
 		orderedParticipants = match.participants;
@@ -1713,8 +1796,10 @@ function createMultiStatsGraph(match, selectedStats) {
 		};
 	});
 
-	// Sort players by team
-	players.sort((a, b) => a.teamId - b.teamId);
+	// Sort players by team (skip for Arena, where placement-based order is preserved)
+	if (!isArena) {
+		players.sort((a, b) => a.teamId - b.teamId);
+	}
 
 	const orderedPlayers = isHorizontal ? [...players].reverse() : players;
 	const traces = [];
