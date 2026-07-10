@@ -40,7 +40,7 @@ const QUEUE_GROUPS = [
     },
     {
         "id": "490",
-        "name": "SR Quickplay",
+        "name": "SR Quickplay (Old)",
         "group": "Summoner's Rift"
     },
     {
@@ -61,6 +61,11 @@ const QUEUE_GROUPS = [
     {
         "id": "440",
         "name": "SR Ranked Flex",
+        "group": "Summoner's Rift"
+    },
+    {
+        "id": "710",
+        "name": "SR Ranked 5s",
         "group": "Summoner's Rift"
     },
     {
@@ -448,6 +453,11 @@ const QUEUE_GROUPS = [
     {
         "id": "1700",
         "name": "RW Arena",
+        "group": "Arena"
+    },
+    {
+        "id": "1750",
+        "name": "RW Arena 3x6",
         "group": "Arena"
     },
     {
