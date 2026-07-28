@@ -1009,8 +1009,9 @@ loadJSON(match_url).then(match_data => {
 					}
 				}
 
-				// Render the timeline explorer after initial graph setup
+				// Render the timeline explorer and timeline graphs after initial graph setup
 				renderTimelineExplorer(match);
+				renderTimelineGraph(match);
 			});
 		});
 	}).catch(handleError);
@@ -1629,6 +1630,316 @@ function renderTimelineExplorer(match) {
         li.appendChild(left);
         list.appendChild(li);
     }
+}
+
+// ===== Timeline Graphs =====
+
+// Stats derivable from a single participant timeline frame, grouped for the radio-button selector
+const TIMELINE_STAT_OPTIONS = [
+    { key: 'totalGold', label: 'Total Gold', category: 'Economy' },
+    { key: 'cs', label: 'Creep Score', category: 'Economy' },
+    { key: 'xp', label: 'Experience', category: 'Progression' },
+    { key: 'level', label: 'Champion Level', category: 'Progression' },
+    { key: 'damageDealt', label: 'Damage Dealt to Champions', category: 'Damage', requiresDamage: true },
+    { key: 'damageTaken', label: 'Damage Taken', category: 'Damage', requiresDamage: true },
+];
+
+function getFrameStatValue(participantFrame, statKey) {
+    switch (statKey) {
+        case 'totalGold': return participantFrame.totalGold;
+        case 'xp': return participantFrame.xp;
+        case 'cs': return (participantFrame.minionsKilled || 0) + (participantFrame.jungleMinionsKilled || 0);
+        case 'level': return participantFrame.level;
+        case 'damageDealt': return participantFrame.damageStats ? participantFrame.damageStats.totalDamageDoneToChampions : null;
+        case 'damageTaken': return participantFrame.damageStats ? participantFrame.damageStats.totalDamageTaken : null;
+        default: return null;
+    }
+}
+
+// v4 timelines don't carry per-frame damage stats; detect availability so those options can be hidden
+function timelineHasDamageStats(match) {
+    if (!match || !match.frames || match.frames.length === 0) return false;
+    const lastFrame = match.frames[match.frames.length - 1];
+    const pf = Object.values(lastFrame.participantFrames)[0];
+    return !!(pf && pf.damageStats && (pf.damageStats.totalDamageDoneToChampions !== null && pf.damageStats.totalDamageDoneToChampions !== undefined));
+}
+
+// Mix a hex color toward white by `fraction` (0 = original color, 1 = white); used to give teammates distinguishable shades
+function mixWithWhite(hex, fraction) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const mix = (c) => Math.round(c + (255 - c) * fraction);
+    return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+const TIMELINE_TEAM_COLORS = { 100: '#0d6efd', 200: '#dc3545' };
+const TIMELINE_SUBTEAM_COLORS = ['#0d6efd', '#dc3545', '#20c997', '#fd7e14', '#6f42c1', '#ffc107', '#0dcaf0', '#6c757d'];
+
+function getSelectedTimelineStat() {
+    const checked = document.querySelector('.timeline-stat-radio:checked');
+    return checked ? checked.value : TIMELINE_STAT_OPTIONS[0].key;
+}
+
+function populateTimelineGraphControls(match) {
+    const oldStatSelector = $('timeline-stat-selector');
+    const modeSelector = $('timeline-mode-selector');
+    if (!oldStatSelector || !modeSelector) return;
+
+    // Only build once
+    if (oldStatSelector.dataset.ready === '1') return;
+
+    // Replace the placeholder (a Bootstrap .form-select div, which paints a dropdown
+    // arrow even though it holds radio buttons, not a <select>) with a plain container.
+    const statSelectorContainer = document.createElement('div');
+    statSelectorContainer.id = 'timeline-stat-selector';
+    statSelectorContainer.dataset.ready = '1';
+    oldStatSelector.parentNode.replaceChild(statSelectorContainer, oldStatSelector);
+
+    const hasDamage = timelineHasDamageStats(match);
+    const availableStats = TIMELINE_STAT_OPTIONS.filter(opt => !opt.requiresDamage || hasDamage);
+
+    const statsByCategory = {};
+    availableStats.forEach(opt => {
+        if (!statsByCategory[opt.category]) statsByCategory[opt.category] = [];
+        statsByCategory[opt.category].push(opt);
+    });
+
+    statSelectorContainer.innerHTML = Object.entries(statsByCategory).map(([categoryName, opts]) => `
+        <div class="stat-category">
+            <h5>${escapeHtml(categoryName)}</h5>
+            ${opts.map(opt => `
+                <div class="form-check">
+                    <input class="form-check-input timeline-stat-radio" type="radio" name="timeline-stat" id="tl-stat-${opt.key}" value="${opt.key}" ${opt.key === 'totalGold' ? 'checked' : ''}>
+                    <label class="form-check-label" for="tl-stat-${opt.key}">${escapeHtml(opt.label)}</label>
+                </div>`).join('')}
+        </div>`).join('');
+
+    statSelectorContainer.addEventListener('change', () => renderTimelineGraph(match));
+
+    const isArena = isArenaMatch(match);
+    const modeOptions = [
+        { value: 'player', label: 'Per Player' },
+        { value: 'team', label: isArena ? 'Per Subteam (Totals)' : 'Team Totals' },
+    ];
+    if (!isArena) {
+        modeOptions.push({ value: 'diff', label: 'Team Difference (Blue - Red)' });
+    }
+    modeSelector.innerHTML = modeOptions.map(opt => `<option value="${opt.value}">${escapeHtml(opt.label)}</option>`).join('');
+
+    modeSelector.addEventListener('change', () => renderTimelineGraph(match));
+    const showKillsCheckbox = $('timeline-show-kills-checkbox');
+    if (showKillsCheckbox) {
+        showKillsCheckbox.addEventListener('change', () => renderTimelineGraph(match));
+    }
+}
+
+function getChampionNameForParticipant(participant) {
+    if (!champion_data || !participant) return '';
+    for (const key in champion_data.data) {
+        if (champion_data.data[key].key == participant.championId) {
+            return champion_data.data[key].name;
+        }
+    }
+    return '';
+}
+
+// Render the Timeline Graphs section (stat-over-time chart) for the current match/controls
+function renderTimelineGraph(match) {
+    const container = $('timeline-graph');
+    if (!container) return;
+
+    if (!match || !match.mtValid || !match.frames || match.frames.length === 0) {
+        container.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 15%;">No timeline data available for this match.</div>';
+        return;
+    }
+
+    populateTimelineGraphControls(match);
+
+    const statKey = getSelectedTimelineStat();
+    const mode = $('timeline-mode-selector').value;
+    const showKills = $('timeline-show-kills-checkbox').checked;
+    const statOption = TIMELINE_STAT_OPTIONS.find(opt => opt.key === statKey) || TIMELINE_STAT_OPTIONS[0];
+    const statLabel = statOption.label;
+
+    const frames = match.frames;
+    const minutesAxis = frames.map(f => f.timestamp / 60000);
+    const timeHover = frames.map(f => standardTimestamp(f.timestamp / 1000));
+
+    // Per-participant, per-frame stat values (aligned index-for-index with `frames`)
+    const participantSeries = {};
+    frames.forEach((frame, frameIndex) => {
+        for (const [pidStr, pf] of Object.entries(frame.participantFrames)) {
+            const pid = parseInt(pidStr, 10);
+            if (!participantSeries[pid]) participantSeries[pid] = new Array(frames.length).fill(0);
+            participantSeries[pid][frameIndex] = getFrameStatValue(pf, statKey) || 0;
+        }
+    });
+
+    const isArena = isArenaMatch(match);
+    const traces = [];
+
+    if (mode === 'player') {
+        if (isArena) {
+            const subteams = getArenaSubteams(match);
+            subteams.forEach((subteam, subteamIndex) => {
+                const baseColor = TIMELINE_SUBTEAM_COLORS[subteamIndex % TIMELINE_SUBTEAM_COLORS.length];
+                subteam.participants.forEach((p, memberIndex) => {
+                    const color = mixWithWhite(baseColor, memberIndex * 0.35);
+                    traces.push(buildPlayerTrace(match, p, participantSeries[p.participantId], minutesAxis, timeHover, statLabel, color));
+                });
+            });
+        } else {
+            [100, 200].forEach(teamId => {
+                const teamPlayers = match.participants.filter(p => p.teamId === teamId);
+                teamPlayers.forEach((p, memberIndex) => {
+                    const color = mixWithWhite(TIMELINE_TEAM_COLORS[teamId] || '#6c757d', memberIndex * 0.15);
+                    traces.push(buildPlayerTrace(match, p, participantSeries[p.participantId], minutesAxis, timeHover, statLabel, color));
+                });
+            });
+        }
+    } else if (mode === 'team') {
+        if (isArena) {
+            const subteams = getArenaSubteams(match);
+            subteams.forEach((subteam, subteamIndex) => {
+                const color = TIMELINE_SUBTEAM_COLORS[subteamIndex % TIMELINE_SUBTEAM_COLORS.length];
+                const values = frames.map((f, i) => subteam.participants.reduce((sum, p) => sum + (participantSeries[p.participantId][i] || 0), 0));
+                const placement = subteam.placement && subteam.placement !== 99 ? `${subteam.placement}${{1:'st',2:'nd',3:'rd'}[subteam.placement] || 'th'} Place` : `Subteam ${subteamIndex + 1}`;
+                traces.push({
+                    x: minutesAxis, y: values, type: 'scatter', mode: 'lines',
+                    name: placement,
+                    line: { color, width: 2 },
+                    hoverinfo: 'text',
+                    hovertext: values.map((v, i) => `<b>${placement}</b><br>${timeHover[i]}<br>${statLabel}: ${v.toLocaleString()}`)
+                });
+            });
+        } else {
+            [100, 200].forEach(teamId => {
+                const teamPlayers = match.participants.filter(p => p.teamId === teamId);
+                const values = frames.map((f, i) => teamPlayers.reduce((sum, p) => sum + (participantSeries[p.participantId][i] || 0), 0));
+                const teamLabel = teamId === 100 ? 'Blue Team' : 'Red Team';
+                traces.push({
+                    x: minutesAxis, y: values, type: 'scatter', mode: 'lines',
+                    name: teamLabel,
+                    line: { color: TIMELINE_TEAM_COLORS[teamId], width: 3 },
+                    hoverinfo: 'text',
+                    hovertext: values.map((v, i) => `<b>${teamLabel}</b><br>${timeHover[i]}<br>${statLabel}: ${v.toLocaleString()}`)
+                });
+            });
+        }
+    } else if (mode === 'diff') {
+        const blueValues = frames.map((f, i) => match.participants.filter(p => p.teamId === 100).reduce((sum, p) => sum + (participantSeries[p.participantId][i] || 0), 0));
+        const redValues = frames.map((f, i) => match.participants.filter(p => p.teamId === 200).reduce((sum, p) => sum + (participantSeries[p.participantId][i] || 0), 0));
+        const diff = blueValues.map((v, i) => v - redValues[i]);
+
+        // Insert exact zero-crossing points between frames where the lead flips sides, so the
+        // blue/red fill areas meet precisely at 0 instead of both being non-zero over the same
+        // stretch (each fill is only clipped at its own frame points otherwise).
+        const crossedX = [];
+        const crossedY = [];
+        const crossedHover = [];
+        const hoverFor = (d, mins) => `${standardTimestamp(mins * 60)}<br>${statLabel} Diff: ${d >= 0 ? '+' : ''}${Math.round(d).toLocaleString()} (${d >= 0 ? 'Blue' : 'Red'} ahead)`;
+        diff.forEach((d, i) => {
+            if (i > 0) {
+                const prevD = diff[i - 1];
+                if ((prevD > 0 && d < 0) || (prevD < 0 && d > 0)) {
+                    const prevX = minutesAxis[i - 1];
+                    const curX = minutesAxis[i];
+                    const t = prevD / (prevD - d);
+                    const crossX = prevX + t * (curX - prevX);
+                    crossedX.push(crossX);
+                    crossedY.push(0);
+                    crossedHover.push(`${standardTimestamp(crossX * 60)}<br>${statLabel} Diff: Even`);
+                }
+            }
+            crossedX.push(minutesAxis[i]);
+            crossedY.push(d);
+            crossedHover.push(hoverFor(d, minutesAxis[i]));
+        });
+
+        const diffPos = crossedY.map(v => v >= 0 ? v : 0);
+        const diffNeg = crossedY.map(v => v <= 0 ? v : 0);
+
+        traces.push({
+            x: crossedX, y: diffPos, type: 'scatter', mode: 'lines', fill: 'tozeroy',
+            line: { color: TIMELINE_TEAM_COLORS[100], width: 1, shape: 'linear' },
+            fillcolor: 'rgba(13, 110, 253, 0.35)',
+            name: 'Blue Lead', hoverinfo: 'skip'
+        });
+        traces.push({
+            x: crossedX, y: diffNeg, type: 'scatter', mode: 'lines', fill: 'tozeroy',
+            line: { color: TIMELINE_TEAM_COLORS[200], width: 1, shape: 'linear' },
+            fillcolor: 'rgba(220, 53, 69, 0.35)',
+            name: 'Red Lead', hoverinfo: 'skip'
+        });
+        traces.push({
+            x: crossedX, y: crossedY, type: 'scatter', mode: 'lines',
+            line: { color: 'rgba(0,0,0,0)' }, showlegend: false,
+            hoverinfo: 'text',
+            hovertext: crossedHover
+        });
+    }
+
+    if (showKills) {
+        const killEvents = buildTimelineEvents(match).filter(e => e.kind === 'kill');
+        if (killEvents.length > 0) {
+            let yBaseline = 0;
+            for (const trace of traces) {
+                if (Array.isArray(trace.y) && trace.y.length) {
+                    yBaseline = Math.min(yBaseline, ...trace.y.filter(v => typeof v === 'number'));
+                }
+            }
+            traces.push({
+                x: killEvents.map(e => e.t / 60),
+                y: killEvents.map(() => yBaseline),
+                type: 'scatter', mode: 'markers',
+                marker: {
+                    symbol: 'diamond', size: 9,
+                    color: killEvents.map(e => e.killerTeamId === 100 ? TIMELINE_TEAM_COLORS[100] : e.killerTeamId === 200 ? TIMELINE_TEAM_COLORS[200] : '#6c757d'),
+                    line: { color: '#fff', width: 1 }
+                },
+                name: 'Kills',
+                hoverinfo: 'text',
+                hovertext: killEvents.map(e => `${standardTimestamp(e.t)}<br>${e.killer ? escapeHtml(getParticipantName(match, e.killer)) : 'Someone'} killed ${e.victim ? escapeHtml(getParticipantName(match, e.victim)) : 'a champion'}`)
+            });
+        }
+    }
+
+    const layout = {
+        title: `${statLabel} Over Time`,
+        xaxis: { title: 'Game Time (minutes)' },
+        yaxis: { title: statLabel, rangemode: mode === 'diff' ? 'normal' : 'tozero' },
+        legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
+        margin: { l: 70, r: 30, t: 70, b: 50 },
+        height: 600
+    };
+
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        displaylogo: false,
+        toImageButtonOptions: {
+            format: 'png',
+            filename: 'LoL_Timeline_Graph',
+            height: 500,
+            width: 900,
+            scale: 2
+        }
+    };
+
+    Plotly.newPlot(container, traces, layout, config);
+}
+
+function buildPlayerTrace(match, participant, values, minutesAxis, timeHover, statLabel, color) {
+    const playerName = getParticipantName(match, participant);
+    const champName = getChampionNameForParticipant(participant);
+    return {
+        x: minutesAxis, y: values, type: 'scatter', mode: 'lines',
+        name: `${champName} (${playerName})`,
+        line: { color, width: 2 },
+        hoverinfo: 'text',
+        hovertext: values.map((v, i) => `<b>${escapeHtml(playerName)}</b><br>${escapeHtml(champName)}<br>${timeHover[i]}<br>${statLabel}: ${v.toLocaleString()}`)
+    };
 }
 
 function populateStatSelector(match) {

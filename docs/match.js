@@ -716,6 +716,9 @@ class Match {
 						jungleMinionsKilled: frameData.jungleMinionsKilled,
 						dominionScore: null,
 						teamScore: null,
+						// Included for timeline graphs; null for v4 matches (no per-frame damage data)
+						damageStats: frameData.damageStats,
+						championStats: frameData.championStats,
 					};
 				}
 
