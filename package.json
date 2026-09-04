@@ -1,0 +1,12 @@
+{
+  "name": "lol-match-stats-viewer",
+  "version": "1.0.0",
+  "description": "A modern, browser-based League of Legends statistics viewer for match-v4/match-v5 details and timeline JSONs.",
+  "main": "docs/match.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iaace-NA/lol-match-stats-viewer.git"
+  },
+  "author": "iaace LLC",
+  "license": "AGPL-3.0"
+}

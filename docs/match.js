@@ -23,20 +23,20 @@ class Match {
 	/**
 	 * Creates a new Match instance from Riot API match data
 	 *
-	 * @param {Object} MATCH_CHAMPIONS - Champion data from Data Dragon API for champion ID resolution
 	 * @param {Object|string} matchData - Raw match data (JSON object or string)
 	 * @param {Object|string|null} timelineData - Raw timeline data (JSON object, string, or null)
 	 * @param {boolean} isJsonObject - Whether the input data is already parsed JSON (true) or string (false)
+	 * @param {Object|null} MATCH_CHAMPIONS - Champion data from Data Dragon API for champion ID resolution; optional, falls back to returning unresolved ids when omitted (see matchFindChampion below)
 	 *
 	 * @example
 	 * // Using pre-parsed JSON objects
-	 * const match = new Match(championData, matchJson, timelineJson, true);
+	 * const match = new Match(matchJson, timelineJson, true, championData);
 	 *
 	 * @example
 	 * // Using JSON strings
-	 * const match = new Match(championData, matchString, timelineString, false);
+	 * const match = new Match(matchString, timelineString, false, championData);
 	 */
-	constructor(MATCH_CHAMPIONS, matchData, timelineData = null, isJsonObject = false) {
+	constructor(matchData, timelineData = null, isJsonObject = false, MATCH_CHAMPIONS = null) {
 		/**
 		 * Finds and resolves champion ID from champion data
 		 *
@@ -309,6 +309,7 @@ class Match {
 				item4: participant.stats.item4,
 				item5: participant.stats.item5,
 				item6: participant.stats.item6,
+				roleBoundItem: null, // Patch 26.01+ Role Quest item; doesn't exist in the legacy match-v4 format
 				itemsPurchased: null,
 				killingSprees: participant.stats.killingSprees,
 				kills: participant.stats.kills,
@@ -746,6 +747,12 @@ class Match {
 			item4: participant.item4,
 			item5: participant.item5,
 			item6: participant.item6,
+			// roleBoundItem is the Patch 26.01+ Role Quest item (ADC boots
+			// moved out of the main inventory, Support's stored Control
+			// Wards, and an equivalent for every other role) -- a single
+			// field per participant alongside the long-standing item0-item6
+			// (6 inventory slots + trinket), not an indexed "item7" slot.
+			roleBoundItem: participant.roleBoundItem,
 			kills: participant.kills,
 			deaths: participant.deaths,
 			assists: participant.assists,
@@ -1003,3 +1010,8 @@ class Match {
 		return this.mt?.info?.frameInterval;
 	}
 }
+
+// Dual-environment export: a plain <script> tag (this repo's own docs/index.html)
+// leaves module undefined and just uses the global Match class; a Node require()
+// (e.g. sps depending on this file directly) gets it as a proper export.
+if (typeof module !== "undefined" && module.exports) module.exports = Match;

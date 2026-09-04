@@ -45,7 +45,7 @@ const STAT_CONFIG = {
 	EXCLUDED_STATS: [
 		"playerScore0", "playerScore1", "playerScore2", "playerScore3", "playerScore4",
 		"playerScore5", "playerScore6", "playerScore7", "playerScore8", "playerScore9",
-		"item0", "item1", "item2", "item3", "item4", "item5", "item6", "participantId",
+		"item0", "item1", "item2", "item3", "item4", "item5", "item6", "roleBoundItem", "participantId",
 		"teamId", "championId", "spell1Id", "spell2Id", "playerSubteamId", "subteamPlacement",
         "combatPlayerScore", "objectivePlayerScore", "totalPlayerScore", "totalScoreRank"
 	],
@@ -186,6 +186,7 @@ class AppState {
 			"a":  ["arena.json",      "arena.json"],
 			"a3": ["arena3.json",     "arena3.json"],
 			"5s": ["v5.json",         null],
+			"5r": ["v5-rq.json",      "v5-rq.json"],
 		};
 
 		if (exampleParam !== null) {
@@ -437,7 +438,11 @@ class GameDataManager {
 	 * @returns {string} HTML img element or placeholder
 	 */
 	getItemImage(itemId, cssClass = "item-img") {
-		if (itemId === 0) {
+		// !itemId (not itemId === 0) so a missing slot renders the same
+		// empty placeholder as an explicitly-empty one -- roleBoundItem (the
+		// Patch 26.01+ Role Quest item) is undefined on every match played
+		// before that patch, not 0, since the field didn't exist yet.
+		if (!itemId) {
 			return `<div class="${cssClass}">&nbsp;</div>`;
 		}
 
@@ -776,7 +781,7 @@ function augmentToCell(id) {
 
 // Main execution - maintaining original structure but using new utilities
 loadJSON(match_url).then(match_data => {
-	let match = new Match(champion_data, match_data, null, true);
+	let match = new Match(match_data, null, true, champion_data);
 	const major_patch = match.gameVersion.substring(0, match.gameVersion.indexOf(".", match.gameVersion.indexOf(".") + 1));
 	addv = major_patch + ".1";
 	appState.activeDragonVersion = addv;
@@ -818,7 +823,7 @@ loadJSON(match_url).then(match_data => {
 		appState.spellData = spell_data;
 		appState.runeData = rune_data;
 
-		match = new Match(champion_data, match_data, timeline_data, true);
+		match = new Match(match_data, timeline_data, true, champion_data);
 		console.log(match);
 
 		// Check if this is an Arena match (queue 1700 = 2x8, queue 1750 = 3x6)
@@ -861,7 +866,8 @@ loadJSON(match_url).then(match_data => {
             ${itemIDtoImg(getParticipantStat(p, 'item3'))}
             ${itemIDtoImg(getParticipantStat(p, 'item4'))}
             ${itemIDtoImg(getParticipantStat(p, 'item5'))}
-            ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
+            ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}
+            ${itemIDtoImg(getParticipantStat(p, 'roleBoundItem'), "item-img ms-1")}</td>
             ${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
             ${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
             ${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
@@ -895,7 +901,8 @@ loadJSON(match_url).then(match_data => {
                 ${itemIDtoImg(getParticipantStat(p, 'item3'))}
                 ${itemIDtoImg(getParticipantStat(p, 'item4'))}
                 ${itemIDtoImg(getParticipantStat(p, 'item5'))}
-                ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}</td>
+                ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}
+                ${itemIDtoImg(getParticipantStat(p, 'roleBoundItem'), "item-img ms-1")}</td>
                 ${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
                 ${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
                 ${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
