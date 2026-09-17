@@ -1732,7 +1732,9 @@ function populateTimelineGraphControls(match) {
     if (!isArena) {
         modeOptions.push({ value: 'diff', label: 'Team Difference (Blue - Red)' });
     }
-    modeSelector.innerHTML = modeOptions.map(opt => `<option value="${opt.value}">${escapeHtml(opt.label)}</option>`).join('');
+    // Default to the gold difference view when available (not applicable to Arena matches)
+    const defaultMode = isArena ? 'player' : 'diff';
+    modeSelector.innerHTML = modeOptions.map(opt => `<option value="${opt.value}"${opt.value === defaultMode ? ' selected' : ''}>${escapeHtml(opt.label)}</option>`).join('');
 
     modeSelector.addEventListener('change', () => renderTimelineGraph(match));
     const showKillsCheckbox = $('timeline-show-kills-checkbox');
