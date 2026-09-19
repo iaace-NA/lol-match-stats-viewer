@@ -1570,7 +1570,7 @@ function renderTimelineExplorer(match) {
                 left.appendChild(actionSpan);
 
                 const bBadge = document.createElement('span');
-                bBadge.className = 'badge bg-warning text-dark me-2';
+                bBadge.className = 'badge text-bg-warning me-2';
                 bBadge.textContent = buildingName;
                 left.appendChild(bBadge);
             } else if (e.subtype === 'INHIBITOR_KILL') {
@@ -1583,7 +1583,7 @@ function renderTimelineExplorer(match) {
                 left.appendChild(actionSpan);
 
                 const bBadge = document.createElement('span');
-                bBadge.className = 'badge bg-warning text-dark me-2';
+                bBadge.className = 'badge text-bg-warning me-2';
                 bBadge.textContent = buildingName;
                 left.appendChild(bBadge);
             } else {
@@ -1682,6 +1682,55 @@ function mixWithWhite(hex, fraction) {
 
 const TIMELINE_TEAM_COLORS = { 100: '#0d6efd', 200: '#dc3545' };
 const TIMELINE_SUBTEAM_COLORS = ['#0d6efd', '#dc3545', '#20c997', '#fd7e14', '#6f42c1', '#ffc107', '#0dcaf0', '#6c757d'];
+
+// Read a Bootstrap theme variable (set by data-bs-theme on <html>)
+function themeColor(name) {
+    return getComputedStyle(document.body).getPropertyValue(name).trim();
+}
+
+// Plotly layout properties that follow the current light/dark theme; merged into every chart layout
+function plotlyThemeLayout() {
+    const fg = themeColor('--bs-body-color');
+    const grid = themeColor('--bs-border-color');
+    const axis = { gridcolor: grid, zerolinecolor: grid, linecolor: grid };
+    return {
+        // Opaque background so exported PNGs stay readable
+        paper_bgcolor: themeColor('--bs-body-bg'),
+        plot_bgcolor: themeColor('--bs-body-bg'),
+        font: { color: fg },
+        xaxis: axis,
+        yaxis: { ...axis }
+    };
+}
+
+// Merge the theme into a chart layout, keeping the chart's own axis settings
+function withPlotlyTheme(layout) {
+    const theme = plotlyThemeLayout();
+    return {
+        ...layout,
+        ...theme,
+        xaxis: { ...theme.xaxis, ...layout.xaxis },
+        yaxis: { ...theme.yaxis, ...layout.yaxis }
+    };
+}
+
+// Re-theme already rendered charts when the system color scheme changes
+window.addEventListener('themechange', () => {
+    const theme = plotlyThemeLayout();
+    ['stats-graph', 'timeline-graph'].forEach(id => {
+        const el = $(id);
+        if (!el || !el.data) return;
+        Plotly.relayout(el, {
+            paper_bgcolor: theme.paper_bgcolor,
+            plot_bgcolor: theme.plot_bgcolor,
+            'font.color': theme.font.color,
+            'xaxis.gridcolor': theme.xaxis.gridcolor, 'xaxis.zerolinecolor': theme.xaxis.zerolinecolor, 'xaxis.linecolor': theme.xaxis.linecolor,
+            'yaxis.gridcolor': theme.yaxis.gridcolor, 'yaxis.zerolinecolor': theme.yaxis.zerolinecolor, 'yaxis.linecolor': theme.yaxis.linecolor
+        });
+        const killIndex = el.data.findIndex(t => t.name === 'Kills');
+        if (killIndex !== -1) Plotly.restyle(el, { 'marker.line.color': theme.paper_bgcolor }, [killIndex]);
+    });
+});
 
 function getSelectedTimelineStat() {
     const checked = document.querySelector('.timeline-stat-radio:checked');
@@ -1905,7 +1954,7 @@ function renderTimelineGraph(match) {
                 marker: {
                     symbol: 'diamond', size: 9,
                     color: killEvents.map(e => e.killerTeamId === 100 ? TIMELINE_TEAM_COLORS[100] : e.killerTeamId === 200 ? TIMELINE_TEAM_COLORS[200] : '#6c757d'),
-                    line: { color: '#fff', width: 1 }
+                    line: { color: themeColor('--bs-body-bg'), width: 1 }
                 },
                 name: 'Kills',
                 hoverinfo: 'text',
@@ -1914,14 +1963,14 @@ function renderTimelineGraph(match) {
         }
     }
 
-    const layout = {
+    const layout = withPlotlyTheme({
         title: `${statLabel} Over Time`,
         xaxis: { title: 'Game Time (minutes)' },
         yaxis: { title: statLabel, rangemode: mode === 'diff' ? 'normal' : 'tozero' },
         legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
         margin: { l: 70, r: 30, t: 70, b: 50 },
         height: 600
-    };
+    });
 
     const config = {
         responsive: true,
@@ -1961,7 +2010,7 @@ function populateStatSelector(match) {
 	statCheckboxContainer.className = "stat-checkbox-container overflow-auto";
 	statCheckboxContainer.style.maxHeight = "600px";
 	statCheckboxContainer.style.width = "100%";
-	statCheckboxContainer.style.border = "1px solid #dee2e6";
+	statCheckboxContainer.style.border = "1px solid var(--bs-border-color)";
 	statCheckboxContainer.style.borderRadius = "0.25rem";
 	statCheckboxContainer.style.padding = "10px";
 
@@ -2144,7 +2193,7 @@ function createMultiStatsGraph(match, selectedStats) {
 		'rgba(255, 215, 0, 0.7)',
 		'rgba(210, 105, 30, 0.7)',
 		'rgba(169, 169, 169, 0.7)',
-		'rgba(0, 0, 0, 0.7)'
+		'rgba(128, 128, 128, 0.7)'
 	];
 
 	const playerLabels = orderedPlayers.map(player => `${player.champName} (${player.name})`);
@@ -2236,7 +2285,7 @@ function createMultiStatsGraph(match, selectedStats) {
 		});
 	}
 
-	const layout = {
+	const layout = withPlotlyTheme({
 		title: 'Multiple Stats Comparison',
 		barmode: sumSelections && selectedStats.length > 1 ? 'stack' : 'group',
 			xaxis: isHorizontal ? {
@@ -2286,7 +2335,7 @@ function createMultiStatsGraph(match, selectedStats) {
 			yanchor: isHorizontal ? 'middle' : 'top'
 		})),
 		height: 800
-	};
+	});
 
 	const config = {
 		responsive: true,

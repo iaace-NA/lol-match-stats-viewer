@@ -9,8 +9,21 @@
     <meta name="keywords" content="League of Legends, LoL, match statistics, Riot API, game analytics, esports">
     <meta name="author" content="iaace LLC">
     <meta name="version" content="2.0.0">
+    <meta name="color-scheme" content="light dark">
     <link rel="shortcut icon" href="favicon.png" type="image/x-icon">
-    <link rel="stylesheet" type="text/css" href="bootstrap-5.1.3.min.css">
+    <script>
+        // Follow the system light/dark preference; runs before stylesheets load to avoid a flash of the wrong theme
+        (() => {
+            const mq = window.matchMedia('(prefers-color-scheme: dark)');
+            const apply = () => document.documentElement.setAttribute('data-bs-theme', mq.matches ? 'dark' : 'light');
+            apply();
+            mq.addEventListener('change', () => {
+                apply();
+                window.dispatchEvent(new Event('themechange'));
+            });
+        })();
+    </script>
+    <link rel="stylesheet" type="text/css" href="bootstrap-5.3.3.min.css">
     <link rel="stylesheet" type="text/css" href="index.css">
     <script src="plotly-latest.min.js"></script>
     <!--<script src="timeago.full.min.js"></script>-->
