@@ -29,6 +29,20 @@ body {
 }
 
 /* ==========================================================================
+   Theme Switch (floating, top right)
+   ========================================================================== */
+
+.theme-switch {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 1030; /* above sticky table headers */
+    background-color: var(--bs-body-bg); /* opaque over page content */
+    border-radius: var(--bs-border-radius-sm);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* ==========================================================================
    Champion and Game Asset Images
    ========================================================================== */
 

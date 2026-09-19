@@ -12,14 +12,60 @@
     <meta name="color-scheme" content="light dark">
     <link rel="shortcut icon" href="favicon.png" type="image/x-icon">
     <script>
-        // Follow the system light/dark preference; runs before stylesheets load to avoid a flash of the wrong theme
+        // Light/dark theme: a saved choice ('light' | 'dark') from the theme switch wins; otherwise follow the system.
+        // Runs before stylesheets load to avoid a flash of the wrong theme.
         (() => {
+            const STORAGE_KEY = 'theme';
             const mq = window.matchMedia('(prefers-color-scheme: dark)');
-            const apply = () => document.documentElement.setAttribute('data-bs-theme', mq.matches ? 'dark' : 'light');
+
+            // localStorage can be unavailable (private mode, blocked site data)
+            const getSaved = () => {
+                try {
+                    const value = localStorage.getItem(STORAGE_KEY);
+                    return value === 'light' || value === 'dark' ? value : null;
+                } catch {
+                    return null;
+                }
+            };
+            const setSaved = (value) => {
+                try {
+                    if (value) localStorage.setItem(STORAGE_KEY, value);
+                    else localStorage.removeItem(STORAGE_KEY);
+                } catch {}
+            };
+
+            // Reflect the saved choice (or "system") in the switch's buttons
+            const syncSwitch = () => {
+                const input = document.getElementById(`theme-${getSaved() || 'system'}`);
+                if (input) input.checked = true;
+            };
+
+            // Set data-bs-theme; notify listeners (the Plotly charts) only when it actually changes
+            const apply = () => {
+                const theme = getSaved() || (mq.matches ? 'dark' : 'light');
+                const root = document.documentElement;
+                if (root.getAttribute('data-bs-theme') === theme) return;
+                const isInitial = !root.hasAttribute('data-bs-theme');
+                root.setAttribute('data-bs-theme', theme);
+                if (!isInitial) window.dispatchEvent(new Event('themechange'));
+            };
+
             apply();
-            mq.addEventListener('change', () => {
+            mq.addEventListener('change', apply);
+            // Keep other open tabs in step with a choice made here
+            window.addEventListener('storage', (e) => {
+                if (e.key !== STORAGE_KEY && e.key !== null) return;
                 apply();
-                window.dispatchEvent(new Event('themechange'));
+                syncSwitch();
+            });
+            document.addEventListener('DOMContentLoaded', () => {
+                syncSwitch();
+                document.querySelectorAll('input[name="theme-choice"]').forEach(input => {
+                    input.addEventListener('change', () => {
+                        setSaved(input.value === 'system' ? null : input.value);
+                        apply();
+                    });
+                });
             });
         })();
     </script>
@@ -33,6 +79,15 @@
 </head>
 
 <body>
+    <!-- Theme switch: segmented buttons fixed to the top right; wired up by the theme script in <head> -->
+    <div class="theme-switch btn-group btn-group-sm" role="group" aria-label="Color theme">
+        <input type="radio" class="btn-check" name="theme-choice" id="theme-light" value="light" autocomplete="off">
+        <label class="btn btn-outline-secondary" for="theme-light">Light</label>
+        <input type="radio" class="btn-check" name="theme-choice" id="theme-system" value="system" autocomplete="off">
+        <label class="btn btn-outline-secondary" for="theme-system" title="Follow the system setting">Auto</label>
+        <input type="radio" class="btn-check" name="theme-choice" id="theme-dark" value="dark" autocomplete="off">
+        <label class="btn btn-outline-secondary" for="theme-dark">Dark</label>
+    </div>
     <div id="metadata"></div>
     <div id="scoreboard">
         <div class="tac">
