@@ -20,6 +20,17 @@ const CONFIG = {
 	DDRAGON_BASE_URL: 'https://ddragon.leagueoflegends.com/cdn',
 	EXAMPLE_DATA_PATH: 'example-data',
 
+	// Named example presets for ?example=<key>: [matchFile, timelineFile, label]
+	// A null timelineFile means no timeline is loaded for that preset.
+	EXAMPLE_PRESETS: {
+		"5r": ["v5-rq.json",      "v5-rq.json",      "Summoner's Rift (match-v5)"],
+		"5s": ["v5.json",         null,              "Summoner's Rift, no timeline (match-v5)"],
+		"a":  ["arena.json",      "arena.json",      "Arena (match-v5)"],
+		"a3": ["arena3.json",     "arena3.json",     "Arena, 3 augments (match-v5)"],
+		"4":  ["2808045821.json", "2808045821.json", "Summoner's Rift (match-v4)"],
+	},
+	DEFAULT_EXAMPLE: ["v5.json", "v5.json"],
+
 	// Chart configuration
 	DEFAULT_CHART_HEIGHT: 600,
 	MAX_SELECTOR_HEIGHT: 400,
@@ -159,6 +170,20 @@ const REGIONS = {
 };
 
 /**
+ * A problem with the page's query parameters. Carries a message for the page (title, text)
+ * and a separate, more technical message for the developer console.
+ */
+class UrlParamError extends Error {
+	constructor(title, userMessage, devMessage) {
+		super(devMessage);
+		this.name = 'UrlParamError';
+		this.title = title;
+		this.userMessage = userMessage;
+		this.devMessage = devMessage;
+	}
+}
+
+/**
  * Application state management
  */
 class AppState {
@@ -174,31 +199,69 @@ class AppState {
 	}
 
 	/**
-	 * Initialize application state from URL parameters
+	 * Initialize application state from URL parameters.
+	 * Sets this.paramError (a UrlParamError) when the match cannot be loaded from the given parameters.
 	 */
 	initialize() {
 		const exampleParam = UrlUtils.getParameterByName("example");
-
-		// Named example presets: map query param value -> [matchFile, timelineFile]
-		// A null timelineFile means no timeline is loaded for that preset.
-		const EXAMPLE_PRESETS = {
-			"4":  ["2808045821.json", "2808045821.json"],
-			"a":  ["arena.json",      "arena.json"],
-			"a3": ["arena3.json",     "arena3.json"],
-			"5s": ["v5.json",         null],
-			"5r": ["v5-rq.json",      "v5-rq.json"],
-		};
+		this.paramError = null;
 
 		if (exampleParam !== null) {
-			const preset = EXAMPLE_PRESETS[exampleParam] || ["v5.json", "v5.json"];
-			this.matchUrl    = `${CONFIG.EXAMPLE_DATA_PATH}/match/${preset[0]}`;
-			this.timelineUrl = preset[1] ? `${CONFIG.EXAMPLE_DATA_PATH}/timeline/${preset[1]}` : null;
+			const preset = CONFIG.EXAMPLE_PRESETS[exampleParam];
+			if (!preset) {
+				// Documented behavior: any unrecognized value loads the default example
+				console.warn(`[lol-match-stats-viewer] Unknown example preset "${exampleParam}"; loading the default example. ` +
+					`Valid presets: ${Object.keys(CONFIG.EXAMPLE_PRESETS).join(", ")}.`);
+			}
+			const [matchFile, timelineFile] = preset || CONFIG.DEFAULT_EXAMPLE;
+			this.matchUrl    = `${CONFIG.EXAMPLE_DATA_PATH}/match/${matchFile}`;
+			this.timelineUrl = timelineFile ? `${CONFIG.EXAMPLE_DATA_PATH}/timeline/${timelineFile}` : null;
 		} else {
 			this.matchUrl    = UrlUtils.getParameterByName("match");
 			this.timelineUrl = UrlUtils.getParameterByName("timeline");
+			this.paramError  = this.validateParams();
 		}
 
 		this.isInitialized = true;
+	}
+
+	/**
+	 * Check the match/timeline parameters. An unusable timeline is dropped with a warning,
+	 * since the page still works without one; an unusable match is returned as an error.
+	 * @returns {UrlParamError|null}
+	 */
+	validateParams() {
+		const received = `Received: match=${JSON.stringify(this.matchUrl)}, timeline=${JSON.stringify(this.timelineUrl)}.`;
+
+		if (this.timelineUrl !== null && (this.timelineUrl === "" || !SecurityUtils.isUrlSafe(this.timelineUrl))) {
+			console.warn(`[lol-match-stats-viewer] Ignoring the "timeline" parameter: it must be a non-empty http(s) URL. ${received}`);
+			this.timelineUrl = null;
+		}
+
+		if (this.matchUrl === null) {
+			return new UrlParamError(
+				"No match selected",
+				this.timelineUrl
+					? "A timeline was provided, but a timeline can only be shown together with its match."
+					: "This viewer shows the details of one League of Legends match. Open it with a link to the match data, or try one of the examples below.",
+				`Missing required "match" parameter. ${received}`
+			);
+		}
+		if (this.matchUrl === "") {
+			return new UrlParamError(
+				"The match link is empty",
+				"The link you opened has a match parameter but no address in it. It may have been cut off when it was copied.",
+				`The "match" parameter is empty. ${received}`
+			);
+		}
+		if (!SecurityUtils.isUrlSafe(this.matchUrl)) {
+			return new UrlParamError(
+				"The match link isn't valid",
+				"The match data must come from a web address (http or https).",
+				`The "match" parameter must be an http(s) URL (relative URLs are allowed). ${received}`
+			);
+		}
+		return null;
 	}
 }
 
@@ -780,7 +843,7 @@ function augmentToCell(id) {
 }
 
 // Main execution - maintaining original structure but using new utilities
-loadJSON(match_url).then(match_data => {
+(appState.paramError ? Promise.reject(appState.paramError) : loadJSON(match_url)).then(match_data => {
 	let match = new Match(match_data, null, true, champion_data);
 	const major_patch = match.gameVersion.substring(0, match.gameVersion.indexOf(".", match.gameVersion.indexOf(".") + 1));
 	addv = major_patch + ".1";
@@ -1033,7 +1096,44 @@ function getSelectedStats() {
 	return selectedStats;
 }
 
+// Page usage shown with parameter errors: example links plus the expected URL format
+function paramHelpHtml() {
+	const examples = Object.entries(CONFIG.EXAMPLE_PRESETS)
+		.map(([key, [, , label]]) => `<li><a href="?example=${encodeURIComponent(key)}">${escapeHtml(label)}</a></li>`)
+		.join("");
+	return `<p class="mb-1 fw-semibold">Examples</p><ul class="mb-3">${examples}</ul>
+		<p class="mb-1 fw-semibold">Link format</p>
+		<code class="d-block text-break">?match=&lt;URL of match JSON&gt;&amp;timeline=&lt;URL of timeline JSON (optional)&gt;</code>
+		<p class="small text-body-secondary mt-2 mb-0">Both URLs should be URL-encoded and point to Riot API match-v4 or match-v5 JSON.</p>`;
+}
+
+function showParamError(err) {
+	// Scripts load in <head>, so this can run before the page body exists
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", () => showParamError(err), { once: true });
+		return;
+	}
+	console.warn(`[lol-match-stats-viewer] ${err.devMessage}\n` +
+		`Expected: ?match=<url>[&timeline=<url>] or ?example=<${Object.keys(CONFIG.EXAMPLE_PRESETS).join("|")}>. ` +
+		`URLs must be http(s) (relative allowed) and URL-encoded.`);
+	$("scoreboard").innerHTML = `<div class="alert alert-warning mt-5 mx-auto" style="max-width: 640px;">
+		<h4 class="alert-heading">${escapeHtml(err.title)}</h4>
+		<p>${escapeHtml(err.userMessage)}</p>
+		<hr>
+		${paramHelpHtml()}
+	</div>`;
+	// Nothing to chart without a match
+	["stats-graph-container", "timeline-graph-container", "timeline-explorer"].forEach(id => {
+		const el = $(id);
+		if (el) el.classList.add("d-none");
+	});
+}
+
 function handleError(err) {
+	if (err instanceof UrlParamError) {
+		showParamError(err);
+		return;
+	}
 	console.error(err);
 	var scoreboard = $("scoreboard");
 	if (scoreboard) {
