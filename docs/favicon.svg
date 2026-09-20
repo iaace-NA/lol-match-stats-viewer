@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <title>League of Legends Match Statistics Viewer</title>
+    <rect x="6" y="36" width="14" height="22" rx="3" fill="#0d6efd" />
+    <rect x="25" y="24" width="14" height="34" rx="3" fill="#dc3545" />
+    <rect x="44" y="8" width="14" height="50" rx="3" fill="#0d6efd" />
+</svg>
