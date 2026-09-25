@@ -444,7 +444,8 @@ class Match {
 					timestamp: frame.timestamp,
 				};
 
-				for (const [participantId, frameData] of Object.entries(frame.participantFrames)) {
+				// Absent in some frames of games Riot records oddly (see _buildLegacyStats); an empty frame is kept.
+				for (const [participantId, frameData] of Object.entries(frame.participantFrames ?? {})) {
 					normalizedFrame.participantFrames[participantId] = {
 						championStats: this._createEmptyChampionStats(),
 						currentGold: frameData.currentGold,
@@ -705,7 +706,8 @@ class Match {
 					timestamp: frame.timestamp,
 				};
 
-				for (const [participantId, frameData] of Object.entries(frame.participantFrames)) {
+				// null in some frames of Practice Tool and empty custom games; an empty frame is kept.
+				for (const [participantId, frameData] of Object.entries(frame.participantFrames ?? {})) {
 					legacyFrame.participantFrames[participantId] = {
 						participantId: parseInt(participantId),
 						position: frameData.position,
@@ -737,6 +739,12 @@ class Match {
 	 * @returns {Object} Legacy stats format
 	 */
 	_buildLegacyStats(participant) {
+		// Runes are not always present. Practice Tool games (queue 3140, one participant) that
+		// Riot listed in match history around patch 15.17 have both styles with empty
+		// selections, so check each level before reading it. Missing runes come out undefined,
+		// like any other field Riot leaves out.
+		const styles = participant.perks?.styles;
+		const rune = (style, slot) => styles?.[style]?.selections?.[slot] ?? {};
 		return {
 			participantId: participant.participantId,
 			win: participant.win,
@@ -819,32 +827,32 @@ class Match {
 			playerScore7: null,
 			playerScore8: null,
 			playerScore9: null,
-			perk0: participant.perks.styles[0].selections[0].perk,
-			perk0Var1: participant.perks.styles[0].selections[0].var1,
-			perk0Var2: participant.perks.styles[0].selections[0].var2,
-			perk0Var3: participant.perks.styles[0].selections[0].var3,
-			perk1: participant.perks.styles[0].selections[1].perk,
-			perk1Var1: participant.perks.styles[0].selections[1].var1,
-			perk1Var2: participant.perks.styles[0].selections[1].var2,
-			perk1Var3: participant.perks.styles[0].selections[1].var3,
-			perk2: participant.perks.styles[0].selections[2].perk,
-			perk2Var1: participant.perks.styles[0].selections[2].var1,
-			perk2Var2: participant.perks.styles[0].selections[2].var2,
-			perk2Var3: participant.perks.styles[0].selections[2].var3,
-			perk3: participant.perks.styles[0].selections[3].perk,
-			perk3Var1: participant.perks.styles[0].selections[3].var1,
-			perk3Var2: participant.perks.styles[0].selections[3].var2,
-			perk3Var3: participant.perks.styles[0].selections[3].var3,
-			perk4: participant.perks.styles[1].selections[0].perk,
-			perk4Var1: participant.perks.styles[1].selections[0].var1,
-			perk4Var2: participant.perks.styles[1].selections[0].var2,
-			perk4Var3: participant.perks.styles[1].selections[0].var3,
-			perk5: participant.perks.styles[1].selections[1].perk,
-			perk5Var1: participant.perks.styles[1].selections[1].var1,
-			perk5Var2: participant.perks.styles[1].selections[1].var2,
-			perk5Var3: participant.perks.styles[1].selections[1].var3,
-			perkPrimaryStyle: participant.perks.styles[0].style,
-			perkSubStyle: participant.perks.styles[1].style,
+			perk0: rune(0, 0).perk,
+			perk0Var1: rune(0, 0).var1,
+			perk0Var2: rune(0, 0).var2,
+			perk0Var3: rune(0, 0).var3,
+			perk1: rune(0, 1).perk,
+			perk1Var1: rune(0, 1).var1,
+			perk1Var2: rune(0, 1).var2,
+			perk1Var3: rune(0, 1).var3,
+			perk2: rune(0, 2).perk,
+			perk2Var1: rune(0, 2).var1,
+			perk2Var2: rune(0, 2).var2,
+			perk2Var3: rune(0, 2).var3,
+			perk3: rune(0, 3).perk,
+			perk3Var1: rune(0, 3).var1,
+			perk3Var2: rune(0, 3).var2,
+			perk3Var3: rune(0, 3).var3,
+			perk4: rune(1, 0).perk,
+			perk4Var1: rune(1, 0).var1,
+			perk4Var2: rune(1, 0).var2,
+			perk4Var3: rune(1, 0).var3,
+			perk5: rune(1, 1).perk,
+			perk5Var1: rune(1, 1).var1,
+			perk5Var2: rune(1, 1).var2,
+			perk5Var3: rune(1, 1).var3,
+			perkPrimaryStyle: styles?.[0]?.style,
+			perkSubStyle: styles?.[1]?.style,
 			// V5 additions
 			spell1Casts: participant.spell1Casts,
 			spell2Casts: participant.spell2Casts,
