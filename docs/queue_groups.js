@@ -461,6 +461,11 @@ const QUEUE_GROUPS = [
         "group": "Arena"
     },
     {
+        "id": "1740",
+        "name": "RW Bravery Arena",
+        "group": "Arena"
+    },
+    {
         "id": "1710",
         "name": "RW Arena (Custom)",
         "group": "Arena"
