@@ -27,11 +27,15 @@ The project follows modern JavaScript best practices with:
 - Error handling and validation
 - Responsive CSS design
 - Accessibility considerations
+- UI rendered with [lit-html](https://lit.dev/docs/libraries/standalone-templates/) templates (no build step; no web components)
+
+`index.js` is an ES module, so the page must be served over HTTP (e.g. `python3 -m http.server --directory docs`) rather than opened from the file system.
 
 ### File Structure
 
 - `index.html` - Main application entry point
-- `index.js` - Core application logic and UI management
+- `index.js` - Core application logic and UI management (ES module)
+- `lit-html-3.3.3/` - Vendored lit-html (core plus the `repeat` and `live` directives), from the `lit-html` npm package
 - `match.js` - Match data processing and normalization
 - `queue_groups.js` - Queue configuration and utilities
 - `index.css` - Modern, responsive styling
