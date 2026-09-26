@@ -1514,10 +1514,29 @@ function renderTimelineExplorer(match) {
     }
 
     const badgeForTeam = (teamId) => teamId === 100 ? 'bg-primary' : teamId === 200 ? 'bg-danger' : 'bg-secondary';
+    const teamLabel = (teamId) => teamId === 100 ? 'Blue' : teamId === 200 ? 'Red' : 'Team';
+    const teamImgCls = (teamId) => teamId === 100 ? 'team-blue' : teamId === 200 ? 'team-red' : 'team-other';
+
+    // Each row is a subgrid of the list's shared columns (time | actor | action | target | extra),
+    // so every cell lines up with the same cell in the rows above and below it.
+    const makeCell = () => {
+        const cell = document.createElement('div');
+        cell.className = 'tl-cell';
+        return cell;
+    };
+    const teamBadgeHtml = (teamId) => `<span class="badge tl-team-badge ${badgeForTeam(teamId)}">${teamLabel(teamId)}</span>`;
+    // Champion icon + team badge + player name
+    const fillActor = (cell, participant, teamId) => {
+        cell.insertAdjacentHTML('beforeend', championIDtoImg(participant.championId, `champion-img ${teamImgCls(teamId)}`));
+        cell.insertAdjacentHTML('beforeend', teamBadgeHtml(teamId));
+        const name = document.createElement('span');
+        name.textContent = getParticipantName(match, participant);
+        cell.appendChild(name);
+    };
 
     for (const e of filtered) {
         const li = document.createElement('li');
-        li.className = 'list-group-item d-flex align-items-center justify-content-between';
+        li.className = 'list-group-item tl-row';
 
         // Apply a subtle background tint for the entire row based on the killer/purchaser team
         let rowTeamId;
@@ -1535,73 +1554,53 @@ function renderTimelineExplorer(match) {
             li.classList.add('tl-row-red');
         }
 
-        const left = document.createElement('div');
-        left.className = 'd-flex align-items-center';
+        const timeCell = makeCell();
+        const actorCell = makeCell();
+        const actionCell = makeCell();
+        const targetCell = makeCell();
+        const extraCell = makeCell();
 
         const timeBadge = document.createElement('span');
-        timeBadge.className = 'badge rounded-pill bg-secondary me-3';
+        timeBadge.className = 'badge rounded-pill bg-secondary';
         timeBadge.textContent = standardTimestamp(e.t);
-        left.appendChild(timeBadge);
+        timeCell.appendChild(timeBadge);
 
         if (e.kind === 'kill') {
-            // Killer image + name (with team badge) first
             if (e.killer) {
-                const killerTeamCls = e.killerTeamId === 100 ? 'team-blue' : e.killerTeamId === 200 ? 'team-red' : 'team-other';
-                left.insertAdjacentHTML('beforeend', championIDtoImg(e.killer.championId, `champion-img ${killerTeamCls}`));
-                const kSpan = document.createElement('span');
-                kSpan.className = 'ms-2 me-2';
-                kSpan.innerHTML = `<span class="badge ${badgeForTeam(e.killerTeamId)} me-2">${e.killerTeamId === 100 ? 'Blue' : 'Red'}</span>${escapeHtml(getParticipantName(match, e.killer))}`;
-                left.appendChild(kSpan);
+                fillActor(actorCell, e.killer, e.killerTeamId);
             } else {
-                const unknownK = document.createElement('span');
-                unknownK.className = 'me-2';
-                unknownK.textContent = 'Someone';
-                left.appendChild(unknownK);
+                actorCell.textContent = 'Someone';
             }
 
-            const actionSpan = document.createElement('span');
-            actionSpan.className = 'me-2';
-            actionSpan.textContent = 'killed';
-            left.appendChild(actionSpan);
+            actionCell.textContent = 'killed';
 
-            // Victim image + name after
             if (e.victim) {
-                const victimTeamCls = e.victimTeamId === 100 ? 'team-blue' : e.victimTeamId === 200 ? 'team-red' : 'team-other';
-                left.insertAdjacentHTML('beforeend', championIDtoImg(e.victim.championId, `champion-img ${victimTeamCls}`));
+                targetCell.insertAdjacentHTML('beforeend', championIDtoImg(e.victim.championId, `champion-img ${teamImgCls(e.victimTeamId)}`));
                 const vSpan = document.createElement('span');
-                vSpan.className = 'ms-2';
-                vSpan.innerHTML = `${escapeHtml(getParticipantName(match, e.victim))}`;
-                left.appendChild(vSpan);
+                vSpan.textContent = getParticipantName(match, e.victim);
+                targetCell.appendChild(vSpan);
             } else {
-                const unknownV = document.createElement('span');
-                unknownV.className = 'ms-2';
-                unknownV.textContent = 'a champion';
-                left.appendChild(unknownV);
+                targetCell.textContent = 'a champion';
             }
 
             if (e.assists && e.assists.length > 0) {
-                const assistWrap = document.createElement('span');
-                assistWrap.className = 'timeline-assists ms-3 text-muted';
+                extraCell.classList.add('timeline-assists', 'text-muted');
 
                 const label = document.createElement('span');
                 label.className = 'me-1';
                 label.textContent = 'Assisted by:';
-                assistWrap.appendChild(label);
+                extraCell.appendChild(label);
 
                 for (const aId of e.assists) {
                     const ap = getParticipantById(match, aId);
                     if (ap) {
-                        const aTeamCls = ap.teamId === 100 ? 'team-blue' : ap.teamId === 200 ? 'team-red' : 'team-other';
-                        assistWrap.insertAdjacentHTML('beforeend', championIDtoImg(ap.championId, `champion-img assist-icon ${aTeamCls}`));
+                        extraCell.insertAdjacentHTML('beforeend', championIDtoImg(ap.championId, `champion-img assist-icon ${teamImgCls(ap.teamId)}`));
+                        // Hover tooltip: the assisting player's name
+                        extraCell.lastElementChild.title = getParticipantName(match, ap);
                     }
                 }
-
-                left.appendChild(assistWrap);
             }
         } else if (e.kind === 'objective') {
-            const desc = document.createElement('span');
-            desc.className = 'me-2';
-
             // Show killer (participant) when available, otherwise show team badge
             const effTeamId = (e.teamId !== undefined && e.teamId !== null)
                 ? e.teamId
@@ -1610,19 +1609,9 @@ function renderTimelineExplorer(match) {
                     : undefined;
 
             if (e.killer) {
-                const killerTeamCls = effTeamId === 100 ? 'team-blue' : effTeamId === 200 ? 'team-red' : 'team-other';
-                left.insertAdjacentHTML('beforeend', championIDtoImg(e.killer.championId, `champion-img ${killerTeamCls}`));
-                const kSpan = document.createElement('span');
-                kSpan.className = 'ms-2 me-2';
-                const badgeCls = badgeForTeam(effTeamId);
-                const badgeTxt = effTeamId === 100 ? 'Blue' : effTeamId === 200 ? 'Red' : 'Team';
-                kSpan.innerHTML = `<span class="badge ${badgeCls} me-2">${badgeTxt}</span>${escapeHtml(getParticipantName(match, e.killer))}`;
-                left.appendChild(kSpan);
+                fillActor(actorCell, e.killer, effTeamId);
             } else if (effTeamId) {
-                const badge = document.createElement('span');
-                badge.className = `badge ${badgeForTeam(effTeamId)} me-2`;
-                badge.textContent = effTeamId === 100 ? 'Blue' : effTeamId === 200 ? 'Red' : 'Team';
-                left.appendChild(badge);
+                actorCell.insertAdjacentHTML('beforeend', teamBadgeHtml(effTeamId));
             }
 
             if (e.subtype === 'ELITE_MONSTER_KILL') {
@@ -1642,15 +1631,12 @@ function renderTimelineExplorer(match) {
                     monster = (e.monsterType || '').toString().replace(/_/g, ' ').toLowerCase();
                 }
 
-                const actionSpan = document.createElement('span');
-                actionSpan.className = 'me-2';
-                actionSpan.textContent = 'secured';
-                left.appendChild(actionSpan);
+                actionCell.textContent = 'secured';
 
                 const objBadge = document.createElement('span');
-                objBadge.className = 'badge bg-success me-2';
+                objBadge.className = 'badge bg-success';
                 objBadge.textContent = monster;
-                left.appendChild(objBadge);
+                targetCell.appendChild(objBadge);
             } else if (e.subtype === 'BUILDING_KILL') {
                 const lane = (e.laneType || '').toString().replace(/_/g, ' ').toLowerCase();
                 const tower = (e.towerType || '').toString().replace(/_/g, ' ').toLowerCase();
@@ -1664,77 +1650,57 @@ function renderTimelineExplorer(match) {
                     buildingName = 'structure';
                 }
 
-                const actionSpan = document.createElement('span');
-                actionSpan.className = 'me-2';
-                actionSpan.textContent = 'destroyed';
-                left.appendChild(actionSpan);
+                actionCell.textContent = 'destroyed';
 
                 const bBadge = document.createElement('span');
-                bBadge.className = 'badge text-bg-warning me-2';
+                bBadge.className = 'badge text-bg-warning';
                 bBadge.textContent = buildingName;
-                left.appendChild(bBadge);
+                targetCell.appendChild(bBadge);
             } else if (e.subtype === 'INHIBITOR_KILL') {
                 const lane = (e.laneType || '').toString().replace(/_/g, ' ').toLowerCase();
                 const buildingName = `${lane ? lane + ' ' : ''}inhibitor`.trim();
 
-                const actionSpan = document.createElement('span');
-                actionSpan.className = 'me-2';
-                actionSpan.textContent = 'destroyed';
-                left.appendChild(actionSpan);
+                actionCell.textContent = 'destroyed';
 
                 const bBadge = document.createElement('span');
-                bBadge.className = 'badge text-bg-warning me-2';
+                bBadge.className = 'badge text-bg-warning';
                 bBadge.textContent = buildingName;
-                left.appendChild(bBadge);
+                targetCell.appendChild(bBadge);
             } else {
-                desc.textContent = 'captured an objective';
-                left.appendChild(desc);
+                actionCell.textContent = 'captured an objective';
             }
         } else if (e.kind === 'item') {
-            // Team badge
-            const badge = document.createElement('span');
-            badge.className = `badge ${badgeForTeam(e.teamId)} me-3`;
-            badge.textContent = e.teamId === 100 ? 'Blue' : e.teamId === 200 ? 'Red' : 'Team';
-            left.appendChild(badge);
-
-            // Participant
             if (e.participant) {
-                const partTeamCls = e.teamId === 100 ? 'team-blue' : e.teamId === 200 ? 'team-red' : 'team-other';
-                left.insertAdjacentHTML('beforeend', championIDtoImg(e.participant.championId, `champion-img ${partTeamCls}`));
-                const pSpan = document.createElement('span');
-                pSpan.className = 'ms-2 me-2';
-                pSpan.textContent = getParticipantName(match, e.participant);
-                left.appendChild(pSpan);
+                fillActor(actorCell, e.participant, e.teamId);
+            } else {
+                actorCell.insertAdjacentHTML('beforeend', teamBadgeHtml(e.teamId));
             }
 
             // Action description
-            const actionSpan = document.createElement('span');
-            actionSpan.className = 'me-2 text-muted';
-            actionSpan.textContent = e.action || 'updated items';
-            left.appendChild(actionSpan);
+            actionCell.classList.add('text-muted');
+            actionCell.textContent = e.action || 'updated items';
 
             // Item icons
-            if (e.kind === 'item' && (e.itemId || e.beforeId || e.afterId)) {
+            if (e.itemId || e.beforeId || e.afterId) {
                 const isConsumed = e.action === 'consumed';
                 const isUndone = e.action === 'undid';
                 if (e.beforeId && e.afterId) {
                     // Show transform/undo as before -> after
-                    const beforeCls = `item-img me-1${isUndone ? ' grayscale' : ''}`;
-                    left.insertAdjacentHTML('beforeend', itemIDtoImg(e.beforeId, beforeCls));
+                    const beforeCls = `item-img${isUndone ? ' grayscale' : ''}`;
+                    targetCell.insertAdjacentHTML('beforeend', itemIDtoImg(e.beforeId, beforeCls));
                     const arrow = document.createElement('span');
-                    arrow.className = 'me-1 ms-1';
                     arrow.textContent = '→';
-                    left.appendChild(arrow);
+                    targetCell.appendChild(arrow);
                     const afterCls = `item-img${isUndone ? ' grayscale' : ''}`;
-                    left.insertAdjacentHTML('beforeend', itemIDtoImg(e.afterId, afterCls));
+                    targetCell.insertAdjacentHTML('beforeend', itemIDtoImg(e.afterId, afterCls));
                 } else if (e.itemId) {
                     const cls = `item-img${(isConsumed || isUndone) ? ' grayscale' : ''}`;
-                    left.insertAdjacentHTML('beforeend', itemIDtoImg(e.itemId, cls));
+                    targetCell.insertAdjacentHTML('beforeend', itemIDtoImg(e.itemId, cls));
                 }
             }
         }
 
-        li.appendChild(left);
+        li.append(timeCell, actorCell, actionCell, targetCell, extraCell);
         list.appendChild(li);
     }
 }

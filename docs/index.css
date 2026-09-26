@@ -513,8 +513,50 @@ table tr:hover {
 
 #timeline-explorer-list {
     max-height: 650px; /* Make timeline scrollable if long (a little bit longer) */
-    overflow-y: auto;
+    overflow: auto;
     padding-right: 6px; /* leave room for scrollbar */
+    /* Shared columns: time | actor | action | target | extra (assists) */
+    display: grid;
+    grid-template-columns: repeat(4, auto) 1fr;
+    column-gap: 0.75rem;
+}
+
+/* Side by side with the filters: fill the filter column's height instead of a fixed cap.
+   Taking the list out of flow lets the filter column alone set the row height. */
+@media (min-width: 768px) {
+    #timeline-explorer-results {
+        position: relative;
+    }
+
+    #timeline-explorer-list {
+        position: absolute;
+        /* match the column's gutters, and end where the filters do (they carry mb-3) */
+        inset: 0 calc(var(--bs-gutter-x) * 0.5) 1rem;
+        max-height: none;
+    }
+}
+
+/* Every row (including the "no events" message) spans all columns */
+#timeline-explorer-list > li {
+    grid-column: 1 / -1;
+}
+
+/* Event rows reuse the list's columns so each detail lines up across rows */
+#timeline-explorer-list > .tl-row {
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: center;
+}
+
+.tl-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Same width for Blue/Red so the player names after them line up */
+.tl-team-badge {
+    min-width: 3.5em; /* fits "Blue" */
 }
 
 .timeline-assists {
