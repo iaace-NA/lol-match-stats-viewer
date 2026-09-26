@@ -1827,6 +1827,8 @@ window.addEventListener('themechange', () => {
             'xaxis.gridcolor': theme.xaxis.gridcolor, 'xaxis.zerolinecolor': theme.xaxis.zerolinecolor, 'xaxis.linecolor': theme.xaxis.linecolor,
             'yaxis.gridcolor': theme.yaxis.gridcolor, 'yaxis.zerolinecolor': theme.yaxis.zerolinecolor, 'yaxis.linecolor': theme.yaxis.linecolor
         });
+        const insideText = el.data.map((t, i) => t.insidetextfont ? i : -1).filter(i => i >= 0);
+        if (insideText.length) Plotly.restyle(el, { 'insidetextfont.color': theme.font.color }, insideText);
         const killIndex = el.data.findIndex(t => t.name === 'Kills');
         if (killIndex !== -1) Plotly.restyle(el, { 'marker.line.color': theme.paper_bgcolor }, [killIndex]);
     });
@@ -2296,6 +2298,11 @@ function createMultiStatsGraph(match, selectedStats) {
 		'rgba(128, 128, 128, 0.7)'
 	];
 
+	// Value labels drawn inside a bar use the theme's text colour. Plotly would otherwise pick one from
+	// the bar colour alone, ignoring its transparency, and choose dark text for bars that render dark
+	// over the dark theme's background. The themechange handler below keeps this in step.
+	const insideTextFont = { color: plotlyThemeLayout().font.color };
+
 	const playerLabels = orderedPlayers.map(player => `${player.champName} (${player.name})`);
 	const champImages = orderedPlayers.map(player => player.champKey);
 	// Use a unique category per player to avoid overlaps when multiple players pick the same champion
@@ -2338,6 +2345,7 @@ function createMultiStatsGraph(match, selectedStats) {
 				y: isHorizontal ? axisCategories : summedValues,
 				text: summedValues.map(val => val.toLocaleString()),
 				textposition: 'auto',
+				insidetextfont: insideTextFont,
 				orientation: isHorizontal ? 'h' : 'v',
 				marker: {
 					color: orderedPlayers.map(player => player.teamId === 100 ? 'rgba(64, 128, 255, 0.7)' : 'rgba(255, 64, 64, 0.7)'),
@@ -2370,6 +2378,7 @@ function createMultiStatsGraph(match, selectedStats) {
 					y: isHorizontal ? axisCategories : values,
 				text: values.map(val => val.toLocaleString()),
 				textposition: 'auto',
+				insidetextfont: insideTextFont,
 				orientation: isHorizontal ? 'h' : 'v',
 				marker: {
 					color: color,
@@ -2385,6 +2394,21 @@ function createMultiStatsGraph(match, selectedStats) {
 		});
 	}
 
+	// Champion icons are anchored to their bar's category on the champion axis, so each one sits on its
+	// own row (or column) whatever the player count, and the name labels are pushed out past the icons
+	// with ticklabelstandoff instead of the icons being drawn over them.
+	const GRAPH_HEIGHT = 800;
+	const marginTop = 70, marginBottom = isHorizontal ? 50 : 170;
+	const ICON_MAX_PX = 36;
+	const ICON_GAP_PX = 6;
+	const rowPx = (GRAPH_HEIGHT - marginTop - marginBottom) / Math.max(1, axisCategories.length);
+	// Horizontal rows have a known height, so the icon is sized to the row; vertical columns depend on
+	// the chart's width, so the icon is capped in pixels and shrinks to the column when that is narrower.
+	// Whole pixels: Plotly only accepts an integer ticklabelstandoff and silently ignores anything else.
+	const iconPx = Math.round(isHorizontal ? Math.min(ICON_MAX_PX, rowPx * 0.8) : ICON_MAX_PX);
+	const iconOffset = iconPx + ICON_GAP_PX;
+	const plotPaperHeight = GRAPH_HEIGHT - marginTop - marginBottom;
+
 	const layout = withPlotlyTheme({
 		title: 'Multiple Stats Comparison',
 		barmode: sumSelections && selectedStats.length > 1 ? 'stack' : 'group',
@@ -2397,22 +2421,26 @@ function createMultiStatsGraph(match, selectedStats) {
 				tickvals: axisCategories,
 				ticktext: playerLabels,
 				tickfont: { size: 9 },
-				tickangle: 45
+				tickangle: 45,
+				ticklabelstandoff: iconOffset,
+				automargin: true
 			},
 			yaxis: isHorizontal ? {
 				title: 'Champions',
 				tickmode: 'array',
 				tickvals: axisCategories,
 				ticktext: playerLabels,
-				tickfont: { size: 10 }
+				tickfont: { size: 10 },
+				ticklabelstandoff: iconOffset,
+				automargin: true
 			} : {
 				title: 'Value'
 			},
 		margin: {
-			l: isHorizontal ? 150 : 80,
+			l: isHorizontal ? 150 + iconOffset : 80,
 			r: 50,
-			b: isHorizontal ? 50 : 170,
-			t: 70,
+			b: marginBottom,
+			t: marginTop,
 			pad: 4
 		},
 		legend: {
@@ -2423,18 +2451,23 @@ function createMultiStatsGraph(match, selectedStats) {
 			xanchor: 'right',
 			x: 1
 		},
+		// On the category axis the image takes its bar's category as its coordinate and is sized in
+		// category units; on the other axis it hangs off the plot edge (paper 0) with a generous box, and
+		// "contain" scales it to whichever dimension is tighter, keeping it square.
 		images: champImages.map((champKey, i) => ({
 			source: `https://ddragon.leagueoflegends.com/cdn/${addv}/img/champion/${champKey}.png`,
-			x: isHorizontal ? -0.02 : (i / champImages.length + 0.03),
-			y: isHorizontal ? (i / champImages.length) + 0.085 : -0.05,
-			xref: 'paper',
-			yref: 'paper',
-			sizex: isHorizontal ? 0.05 : 0.075,
-			sizey: isHorizontal ? 0.05 : 0.075,
+			xref: isHorizontal ? 'paper' : 'x',
+			yref: isHorizontal ? 'y' : 'paper',
+			x: isHorizontal ? 0 : axisCategories[i],
+			y: isHorizontal ? axisCategories[i] : 0,
+			sizex: isHorizontal ? 1 : 0.8,
+			sizey: isHorizontal ? iconPx / rowPx : iconPx / plotPaperHeight,
 			xanchor: isHorizontal ? 'right' : 'center',
-			yanchor: isHorizontal ? 'middle' : 'top'
+			yanchor: isHorizontal ? 'middle' : 'top',
+			sizing: 'contain',
+			layer: 'above'
 		})),
-		height: 800
+		height: GRAPH_HEIGHT
 	});
 
 	const config = {
