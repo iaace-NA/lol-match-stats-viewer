@@ -8,9 +8,15 @@
  * @author iaace LLC
  * @version 2.0.0
  * @license AGPL-3.0
+ *
+ * Loaded as an ES module (strict mode, runs after the document is parsed). The page is rendered
+ * with lit-html templates; match.js, queue_groups.js and Plotly are classic scripts loaded
+ * before this one, so their globals (Match, QUEUE_GROUPS, Plotly) are available here.
  */
 
-"use strict";
+import { html, render, nothing } from './lit-html-3.3.3/lit-html.js';
+import { repeat } from './lit-html-3.3.3/directives/repeat.js';
+import { live } from './lit-html-3.3.3/directives/live.js';
 
 /**
  * Application configuration and constants
@@ -336,7 +342,8 @@ class DataLoader {
  */
 class SecurityUtils {
 	/**
-	 * Escape HTML characters to prevent XSS
+	 * Escape HTML characters to prevent XSS. Lit templates escape on their own; this is for
+	 * strings handed to Plotly, which renders hover text and labels as HTML.
 	 * @param {*} unsafe - Value to escape
 	 * @returns {string} HTML-escaped string
 	 */
@@ -383,40 +390,43 @@ class DOMUtils {
 	}
 
 	/**
-	 * Create HTML table cell with optional CSS class
-	 * @param {*} content - Cell content
-	 * @param {string} className - CSS class name
-	 * @returns {string} HTML cell string
+	 * Render a lit template into a container. The first render into a container clears its
+	 * static placeholder content (e.g. the loading spinner), since lit only manages what it rendered.
+	 * @param {HTMLElement|null} container - Target element
+	 * @param {*} template - Anything lit can render (a template, text, `nothing`, ...)
 	 */
-	static createCell(content = "", className = "") {
-		const escapedContent = SecurityUtils.escapeHtml(content);
-		const classAttr = className ? ` class="${SecurityUtils.escapeHtml(className)}"` : "";
-		return `<td${classAttr}>${escapedContent}</td>`;
+	static renderInto(container, template) {
+		if (!container) return;
+		if (!litContainers.has(container)) {
+			container.replaceChildren();
+			litContainers.add(container);
+		}
+		render(template, container);
 	}
 
 	/**
-	 * Create HTML table header cell
-	 * @param {*} content - Header content
-	 * @param {string} className - CSS class name
-	 * @returns {string} HTML header cell string
+	 * Show a message in place of a Plotly chart
+	 * @param {HTMLElement|null} container - Chart container
+	 * @param {string} message - Message text
+	 * @param {string} marginTop - CSS top margin, to roughly center the message in the chart area
 	 */
-	static createHeaderCell(content = "", className = "") {
-		const escapedContent = SecurityUtils.escapeHtml(content);
-		const classAttr = className ? ` class="${SecurityUtils.escapeHtml(className)}"` : "";
-		return `<th${classAttr}>${escapedContent}</th>`;
+	static showChartMessage(container, message, marginTop) {
+		if (!container) return;
+		Plotly.purge(container);
+		DOMUtils.renderInto(container, html`<div class="alert alert-info text-center" style="margin-top: ${marginTop};">${message}</div>`);
 	}
 
 	/**
-	 * Create unsafe HTML cell (for images and pre-escaped content)
-	 * @param {string} content - Pre-escaped HTML content
-	 * @param {string} className - CSS class name
-	 * @returns {string} HTML cell string
+	 * Remove a message shown by showChartMessage, before plotting into the container
+	 * @param {HTMLElement|null} container - Chart container
 	 */
-	static createUnsafeCell(content = "", className = "") {
-		const classAttr = className ? ` class="${SecurityUtils.escapeHtml(className)}"` : "";
-		return `<td${classAttr}>${content}</td>`;
+	static clearChartMessage(container) {
+		DOMUtils.renderInto(container, nothing);
 	}
 }
+
+// Containers that DOMUtils.renderInto has rendered into
+const litContainers = new WeakSet();
 
 /**
  * Time formatting utilities
@@ -472,33 +482,33 @@ class GameDataManager {
 	}
 
 	/**
-	 * Get champion image HTML
+	 * Get champion image template
 	 * @param {number} championId - Champion ID
 	 * @param {string} cssClass - CSS class for the image
-	 * @returns {string} HTML img element or placeholder
+	 * @param {string} [title] - Optional hover tooltip
+	 * @returns {TemplateResult} img element or placeholder
 	 */
-	getChampionImage(championId, cssClass = "champion-img") {
+	getChampionImage(championId, cssClass = "champion-img", title) {
 		if (!this.state.championData) {
-			return `<div class="${cssClass}">&nbsp;</div>`;
+			return html`<div class=${cssClass}>&nbsp;</div>`;
 		}
 
 		for (const championKey in this.state.championData.data) {
 			if (this.state.championData.data[championKey].key == championId) {
 				const escapedVersion = encodeURIComponent(this.state.activeDragonVersion);
 				const escapedKey = encodeURIComponent(championKey);
-				const escapedClass = SecurityUtils.escapeHtml(cssClass);
-				return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/champion/${escapedKey}.png" alt="${SecurityUtils.escapeHtml(this.state.championData.data[championKey].name)}">`;
+				return html`<img class=${cssClass} src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/champion/${escapedKey}.png" alt=${this.state.championData.data[championKey].name} title=${title ?? nothing}>`;
 			}
 		}
 
-		return `<div class="${cssClass}">&nbsp;</div>`;
+		return html`<div class=${cssClass}>&nbsp;</div>`;
 	}
 
 	/**
-	 * Get item image HTML
+	 * Get item image template
 	 * @param {number} itemId - Item ID
 	 * @param {string} cssClass - CSS class for the image
-	 * @returns {string} HTML img element or placeholder
+	 * @returns {TemplateResult} img element or placeholder
 	 */
 	getItemImage(itemId, cssClass = "item-img") {
 		// !itemId (not itemId === 0) so a missing slot renders the same
@@ -506,71 +516,67 @@ class GameDataManager {
 		// Patch 26.01+ Role Quest item) is undefined on every match played
 		// before that patch, not 0, since the field didn't exist yet.
 		if (!itemId) {
-			return `<div class="${cssClass}">&nbsp;</div>`;
+			return html`<div class=${cssClass}>&nbsp;</div>`;
 		}
 
 		const escapedVersion = encodeURIComponent(this.state.activeDragonVersion);
 		const escapedId = encodeURIComponent(itemId);
-		const escapedClass = SecurityUtils.escapeHtml(cssClass);
-		return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/item/${escapedId}.png" alt="Item ${itemId}">`;
+		return html`<img class=${cssClass} src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/item/${escapedId}.png" alt="Item ${itemId}">`;
 	}
 
 	/**
-	 * Get summoner spell image HTML
+	 * Get summoner spell image template
 	 * @param {number} spellId - Summoner spell ID
 	 * @param {string} cssClass - CSS class for the image
-	 * @returns {string} HTML img element or empty string
+	 * @returns {TemplateResult|nothing} img element, or nothing when unknown
 	 */
 	getSummonerSpellImage(spellId, cssClass = "spell-img") {
 		if (!this.state.spellData) {
-			return "";
+			return nothing;
 		}
 
 		for (const spellKey in this.state.spellData.data) {
 			if (this.state.spellData.data[spellKey].key == spellId) {
 				const escapedVersion = encodeURIComponent(this.state.activeDragonVersion);
 				const escapedId = encodeURIComponent(this.state.spellData.data[spellKey].id);
-				const escapedClass = SecurityUtils.escapeHtml(cssClass);
-				return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/spell/${escapedId}.png" alt="${SecurityUtils.escapeHtml(this.state.spellData.data[spellKey].name)}">`;
+				return html`<img class=${cssClass} src="${CONFIG.DDRAGON_BASE_URL}/${escapedVersion}/img/spell/${escapedId}.png" alt=${this.state.spellData.data[spellKey].name}>`;
 			}
 		}
 
-		return "";
+		return nothing;
 	}
 
 	/**
-	 * Get rune image HTML
+	 * Get rune image template
 	 * @param {number} runeId - Rune ID
 	 * @param {string} cssClass - CSS class for the image
-	 * @returns {string} HTML img element or empty string
+	 * @returns {TemplateResult|nothing} img element, or nothing when unknown
 	 */
 	getRuneImage(runeId, cssClass = "rune-img") {
 		if (!this.state.runeData) {
-			return "";
+			return nothing;
 		}
+
+		const runeImage = (rune) => html`<img class=${cssClass} src="${CONFIG.DDRAGON_BASE_URL}/img/${encodeURIComponent(rune.icon)}" alt=${rune.name}>`;
 
 		// Search through rune trees and their slots
 		for (const runeTree of this.state.runeData) {
 			// Check main rune tree
 			if (runeTree.id === runeId) {
-				const escapedIcon = encodeURIComponent(runeTree.icon);
-				const escapedClass = SecurityUtils.escapeHtml(cssClass);
-				return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/img/${escapedIcon}" alt="${SecurityUtils.escapeHtml(runeTree.name)}">`;
+				return runeImage(runeTree);
 			}
 
 			// Check individual runes in slots
 			for (const slot of runeTree.slots) {
 				for (const rune of slot.runes) {
 					if (rune.id === runeId) {
-						const escapedIcon = encodeURIComponent(rune.icon);
-						const escapedClass = SecurityUtils.escapeHtml(cssClass);
-						return `<img class="${escapedClass}" src="${CONFIG.DDRAGON_BASE_URL}/img/${escapedIcon}" alt="${SecurityUtils.escapeHtml(rune.name)}">`;
+						return runeImage(rune);
 					}
 				}
 			}
 		}
 
-		return "";
+		return nothing;
 	}
 }
 
@@ -795,13 +801,16 @@ function escapeHtml(unsafe) { return SecurityUtils.escapeHtml(unsafe); }
 function getParameterByName(name, url) { return UrlUtils.getParameterByName(name, url); }
 function loadJSON(url, allowNull) { return DataLoader.loadJSON(url, allowNull); }
 function standardTimestamp(seconds) { return TimeUtils.formatDuration(seconds); }
-function cellText(content, className) { return DOMUtils.createCell(content, className); }
-function cellUnsafe(content, className) { return DOMUtils.createUnsafeCell(content, className); }
-function headerText(content, className) { return DOMUtils.createHeaderCell(content, className); }
-function championIDtoImg(id, cssClass) { return gameDataManager.getChampionImage(id, cssClass); }
+function renderInto(container, template) { DOMUtils.renderInto(container, template); }
+function championIDtoImg(id, cssClass, title) { return gameDataManager.getChampionImage(id, cssClass, title); }
 function itemIDtoImg(id, cssClass) { return gameDataManager.getItemImage(id, cssClass); }
 function spellIDtoImg(id, cssClass) { return gameDataManager.getSummonerSpellImage(id, cssClass); }
 function runeIDtoImg(id, cssClass) { return gameDataManager.getRuneImage(id, cssClass); }
+
+// Human-readable stat name
+function statDisplayName(statName) {
+	return stat_name_translation[statName] || camelToTitleCase(statName);
+}
 
 // Initialize legacy variables
 appState.initialize();
@@ -809,37 +818,36 @@ match_url = appState.matchUrl;
 match_timeline_url = appState.timelineUrl;
 let arenaAugmentMap = {};
 
-// Special functions for rune cells
+// Stats table cells that show something other than the raw value
 const stat_value_override = {
-	"perk0": runeToCell,
-	"perk1": runeToCell,
-	"perk2": runeToCell,
-	"perk3": runeToCell,
-	"perk4": runeToCell,
-	"perk5": runeToCell,
-	"perkPrimaryStyle": runeToCell,
-	"perkSubStyle": runeToCell,
+	"perk0": runeCellContent,
+	"perk1": runeCellContent,
+	"perk2": runeCellContent,
+	"perk3": runeCellContent,
+	"perk4": runeCellContent,
+	"perk5": runeCellContent,
+	"perkPrimaryStyle": runeCellContent,
+	"perkSubStyle": runeCellContent,
 	// Arena augment IDs → names (stats table only)
-	"playerAugment1": augmentToCell,
-	"playerAugment2": augmentToCell,
-	"playerAugment3": augmentToCell,
-	"playerAugment4": augmentToCell,
-	"playerAugment5": augmentToCell,
-	"playerAugment6": augmentToCell,
+	"playerAugment1": augmentCellContent,
+	"playerAugment2": augmentCellContent,
+	"playerAugment3": augmentCellContent,
+	"playerAugment4": augmentCellContent,
+	"playerAugment5": augmentCellContent,
+	"playerAugment6": augmentCellContent,
 };
 
-function runeToCell(id) {
-	return cellUnsafe(runeIDtoImg(id));
+function runeCellContent(id) {
+	return runeIDtoImg(id);
 }
 
-function augmentToCell(id) {
+function augmentCellContent(id) {
 	// Only display names in the stats table. 0/undefined means no augment selected.
 	if (id === 0 || id === undefined || id === null) {
-		return cellText("");
+		return "";
 	}
 	const aug = arenaAugmentMap ? arenaAugmentMap[id] : undefined;
-	const name = aug && aug.name ? aug.name : String(id);
-	return cellText(name);
+	return aug && aug.name ? aug.name : String(id);
 }
 
 // Main execution - maintaining original structure but using new utilities
@@ -849,37 +857,35 @@ function augmentToCell(id) {
 	addv = major_patch + ".1";
 	appState.activeDragonVersion = addv;
 
-	$("metadata").innerHTML = `<h1>${queues[match.queueId]}</h1>
-		<p class="m-1">${new Date(match.gameCreation).toLocaleDateString()} ${new Date(match.gameCreation).toLocaleTimeString()}</p>
-		<p class="m-1">Region: ${escapeHtml(regions[match.platformId])}, Match ID: ${escapeHtml(match.gameId)}, Patch ${escapeHtml(major_patch)}, Duration: ${standardTimestamp(match.gameDuration)}</p>`;
+	renderInto($("metadata"), metadataTemplate(match, major_patch));
 
 	Promise.all([
 		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/champion.json`),
 		loadJSON(match_timeline_url, true),
 		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/summoner.json`),
 		loadJSON(`https://ddragon.leagueoflegends.com/cdn/${addv}/data/en_US/runesReforged.json`),
-        loadJSON("arena_augments.json")
+		loadJSON("arena_augments.json")
 	]).then(responses => {
 		console.log(responses);
 		champion_data = responses[0];
 		const timeline_data = responses[1];
 		spell_data = responses[2];
 		rune_data = responses[3];
-        const arena_augments = responses[4];
+		const arena_augments = responses[4];
 
-        // Build Arena Augment lookup map (ID -> metadata)
-        arenaAugmentMap = {};
-        if (Array.isArray(arena_augments)) {
-            for (const aug of arena_augments) {
-                if (aug && aug.id !== undefined && aug.id !== null) {
-                    arenaAugmentMap[aug.id] = {
-                        name: aug.nameTRA || String(aug.id),
-                        icon: aug.augmentSmallIconPath || null,
-                        rarity: aug.rarity || null,
-                    };
-                }
-            }
-        }
+		// Build Arena Augment lookup map (ID -> metadata)
+		arenaAugmentMap = {};
+		if (Array.isArray(arena_augments)) {
+			for (const aug of arena_augments) {
+				if (aug && aug.id !== undefined && aug.id !== null) {
+					arenaAugmentMap[aug.id] = {
+						name: aug.nameTRA || String(aug.id),
+						icon: aug.augmentSmallIconPath || null,
+						rarity: aug.rarity || null,
+					};
+				}
+			}
+		}
 
 		// Update app state
 		appState.championData = champion_data;
@@ -892,192 +898,25 @@ function augmentToCell(id) {
 		// Check if this is an Arena match (queue 1700 = 2x8, queue 1750 = 3x6)
 		const isArena = isArenaMatch(match);
 
-		let teams;
-		if (isArena) {
-			// For Arena matches, group players into their subteams (duos for 2x8,
-			// trios for 3x6) and render one section per subteam ordered by placement.
-			const subteams = getArenaSubteams(match);
-			const ordinal = (n) => {
-				const s = ["th", "st", "nd", "rd"];
-				const v = n % 100;
-				return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
-			};
+		renderInto($("scoreboard"), scoreboardTemplate(match, isArena));
+		renderInto($("player-stats"), playerStatsTemplate(match, isArena));
 
-            teams = subteams.map(subteam => {
-                const placement = subteam.placement && subteam.placement !== 99 ? subteam.placement : null;
-                const placementLabel = placement ? `${ordinal(placement)} Place` : 'Placement ?';
-                return `<thead class="sticky"><tr>
-            ${headerText("Rune")}
-            ${headerText("Spells")}
-            ${headerText("Level")}
-            <th>Champion</th>
-            ${headerText(placementLabel)}
-            ${headerText("Items", "tal")}
-            ${headerText("K / D / A")}
-            ${headerText("CS")}
-            ${headerText("Gold")}
-            </tr></thead>${subteam.participants.map(p => {
-                return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
-            <td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
-            <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
-            ${cellText(getParticipantStat(p, 'champLevel'))}
-            <td><div class="champion-cell"><span class="champion-name">${SecurityUtils.escapeHtml(gameDataManager.getChampionName(p.championId) || '')}</span>${championIDtoImg(p.championId)}</div></td>
-            ${cellText(getParticipantName(match, p))}
-            <td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
-            ${itemIDtoImg(getParticipantStat(p, 'item1'))}
-            ${itemIDtoImg(getParticipantStat(p, 'item2'))}
-            ${itemIDtoImg(getParticipantStat(p, 'item3'))}
-            ${itemIDtoImg(getParticipantStat(p, 'item4'))}
-            ${itemIDtoImg(getParticipantStat(p, 'item5'))}
-            ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}
-            ${itemIDtoImg(getParticipantStat(p, 'roleBoundItem'), "item-img ms-1")}</td>
-            ${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
-            ${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
-            ${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
-            }).join("")}`;
-            }).join("<tr><td>&nbsp;</td></tr>");
-        } else {
-            // Traditional team-based matches
-            teams = match.teams.map((team, team_index) => {
-                console.log(team.bans);
-                return `<thead class="sticky"><tr>
-                ${headerText("Rune")}
-                ${headerText("Spells")}
-                ${headerText("Level")}
-                <th>Champion ${team.bans.map(ban => `<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`).join("")}</th>
-                ${headerText(`Team ${team_index + 1} (${team.win})`)}
-                ${headerText("Items", "tal")}
-                ${headerText("K / D / A")}
-                ${headerText("CS")}
-                ${headerText("Gold")}
-                </tr></thead>${match.participants.map(p => {
-                    if (p.teamId != team.teamId) return "";
-                    return `<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
-                <td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
-                <td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
-                ${cellText(getParticipantStat(p, 'champLevel'))}
-                <td><div class="champion-cell"><span class="champion-name">${SecurityUtils.escapeHtml(gameDataManager.getChampionName(p.championId) || '')}</span>${championIDtoImg(p.championId)}</div></td>
-                ${cellText(getParticipantName(match, p))}
-                <td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
-                ${itemIDtoImg(getParticipantStat(p, 'item1'))}
-                ${itemIDtoImg(getParticipantStat(p, 'item2'))}
-                ${itemIDtoImg(getParticipantStat(p, 'item3'))}
-                ${itemIDtoImg(getParticipantStat(p, 'item4'))}
-                ${itemIDtoImg(getParticipantStat(p, 'item5'))}
-                ${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}
-                ${itemIDtoImg(getParticipantStat(p, 'roleBoundItem'), "item-img ms-1")}</td>
-                ${cellText(`${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}`)}
-                ${cellText((getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0))}
-                ${cellText(getParticipantStat(p, 'goldEarned'))}</tr>`;
-                }).join("")}`;
-            }).join("<tr><td>&nbsp;</td></tr>");
-        }
-        teams = "<table class=\"table\">" + teams + "</table>";
-        $("scoreboard").innerHTML = teams;
-
-		let participant_stat_props = [];
-		// Collect all available stats from all participants (use original order for comprehensive stat collection)
-		for (let participant_id in match.participants) {
-			const participant = match.participants[participant_id];
-			const statNames = getParticipantStatNames(participant, isArena);
-			for (const prop_name of statNames) {
-				if (!participant_stat_props.includes(prop_name)) {
-					participant_stat_props.push(prop_name);
-				}
-			}
-		}
-
-		// Use same participant order as scoreboard - sorted by placement for Arena, original order for others
-		let orderedParticipants;
-		if (isArena) {
-			// For Arena matches, group by subteam and order by placement (same as scoreboard)
-			orderedParticipants = getArenaOrderedParticipants(match);
-		} else {
-			// For traditional matches, use original order
-			orderedParticipants = match.participants;
-		}
-
-  let stats = `<table class="table table-striped mt-5"><thead class="sticky">
-  <tr>${headerText("Summoner Name")}${orderedParticipants.map(p => {
-      return headerText(getParticipantName(match, p));
-  }).join("")}</tr>
-  <tr>${headerText("Champion")}${orderedParticipants.map(p => {
-      return `<th><div class="champion-header">${championIDtoImg(p.championId)}<div class="champion-name">${SecurityUtils.escapeHtml(gameDataManager.getChampionName(p.championId) || '')}</div></div></th>`;
-  }).join("")}</tr>
-  </thead>
-  ${participant_stat_props.map(prop_name => {
-      let remapped_prop_name = camelToTitleCase(prop_name);
-      if (stat_name_translation[prop_name]) {
-          remapped_prop_name = stat_name_translation[prop_name];
-      }
-      return `<tr>${cellText(remapped_prop_name, "tal fw-bold")}${orderedParticipants.map(p => {
-          let classes = "";
-          const statValue = getParticipantStat(p, prop_name);
-          if (statValue === true) {
-              classes = "bool-true";
-          }
-          else if (statValue === false) {
-              classes = "bool-false";
-          }
-          else if (statValue === null || statValue === undefined) {
-              return cellText("");
-          }
-          if (stat_value_override[prop_name]) {
-              return stat_value_override[prop_name](statValue);
-          }
-          else {
-              return cellText(statValue, classes);
-          }
-      }).join("")}</tr>`;
-  }).join("")}</table>`
-  $("player-stats").innerHTML = stats;
-
-		// Initialize the stats graph functionality
+		// Initialize the stats graph controls
 		populateStatSelector(match);
-
-		// Add event listener for chart type selection
-		$("chart-type-selector").addEventListener('change', function () {
-			const selectedStats = getSelectedStats();
-			if (selectedStats.length > 0) {
-				createMultiStatsGraph(match, selectedStats);
-			}
+		$("chart-type-selector").addEventListener('change', updateStatsGraph);
+		$("sum-selections-checkbox").addEventListener('change', updateStatsGraph);
+		$("clear-all-stats").addEventListener('click', (e) => {
+			e.preventDefault();
+			statSelector.selected.clear();
+			renderStatSelector();
+			updateStatsGraph();
 		});
-
-		// Add event listener for the "Sum Selections" checkbox
-		const sumSelectionsCheckbox = $("sum-selections-checkbox");
-		sumSelectionsCheckbox.addEventListener('change', function () {
-			const selectedStats = getSelectedStats();
-			if (selectedStats.length > 0) {
-				createMultiStatsGraph(match, selectedStats);
-			}
-		});
-
-		// Add event listener for the "Clear All" hyperlink
-		const clearAllLink = document.getElementById('clear-all-stats');
-		if (clearAllLink) {
-			clearAllLink.onclick = function (e) {
-				e.preventDefault();
-				document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
-				const graphContainer = $("stats-graph");
-				if (graphContainer) {
-					graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
-				}
-			};
-		}
 
 		// Plot the default selected stats on page load
 		// Render as soon as the DOM has painted and containers have dimensions
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => {
-				const selectedStats = getSelectedStats();
-				if (selectedStats.length > 0) {
-					createMultiStatsGraph(match, selectedStats);
-				} else {
-					const graphContainer = $("stats-graph");
-					if (graphContainer) {
-						graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
-					}
-				}
+				updateStatsGraph();
 
 				// Render the timeline explorer and timeline graphs after initial graph setup
 				renderTimelineExplorer(match);
@@ -1087,41 +926,128 @@ function augmentToCell(id) {
 	}).catch(handleError);
 }).catch(handleError);
 
-// Helper function to get selected stats
-function getSelectedStats() {
-	const selectedStats = [];
-	document.querySelectorAll('.stat-checkbox:checked').forEach(checkbox => {
-		selectedStats.push(checkbox.value);
-	});
-	return selectedStats;
+// Page heading: queue, date, and match details
+function metadataTemplate(match, majorPatch) {
+	const created = new Date(match.gameCreation);
+	return html`<h1>${queues[match.queueId]}</h1>
+		<p class="m-1">${created.toLocaleDateString()} ${created.toLocaleTimeString()}</p>
+		<p class="m-1">Region: ${regions[match.platformId]}, Match ID: ${match.gameId}, Patch ${majorPatch}, Duration: ${standardTimestamp(match.gameDuration)}</p>`;
+}
+
+// English ordinal: 1st, 2nd, 3rd, 4th, ..., 11th, 12th, 13th, 21st, ...
+function ordinal(n) {
+	const s = ["th", "st", "nd", "rd"];
+	const v = n % 100;
+	return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+// Scoreboard: one section per team (or, for Arena, per subteam ordered by placement)
+function scoreboardTemplate(match, isArena) {
+	let sections;
+	if (isArena) {
+		// Arena players are grouped into their subteams (duos for 2x8, trios for 3x6)
+		sections = getArenaSubteams(match).map(subteam => {
+			const placement = subteam.placement && subteam.placement !== 99 ? subteam.placement : null;
+			return {
+				championHeader: "Champion",
+				nameHeader: placement ? `${ordinal(placement)} Place` : 'Placement ?',
+				participants: subteam.participants
+			};
+		});
+	} else {
+		// Traditional team-based matches; the champion header also shows the team's bans
+		sections = match.teams.map((team, team_index) => ({
+			championHeader: html`Champion ${team.bans.map(ban => html`<div style="border: 2px solid red; display: inline-block;">${championIDtoImg(ban.championId, "champion-ban-img")}</div>`)}`,
+			nameHeader: `Team ${team_index + 1} (${team.win})`,
+			participants: match.participants.filter(p => p.teamId == team.teamId)
+		}));
+	}
+
+	return html`<table class="table">${sections.map((section, index) => html`<thead class="sticky"><tr>
+		<th>Rune</th>
+		<th>Spells</th>
+		<th>Level</th>
+		<th>${section.championHeader}</th>
+		<th>${section.nameHeader}</th>
+		<th class="tal">Items</th>
+		<th>K / D / A</th>
+		<th>CS</th>
+		<th>Gold</th>
+		</tr></thead><tbody>${section.participants.map(p => scoreboardRowTemplate(match, p))}${index < sections.length - 1 ? html`<tr><td>&nbsp;</td></tr>` : nothing}</tbody>`)}</table>`;
+}
+
+function scoreboardRowTemplate(match, p) {
+	return html`<tr class="match-${getParticipantStat(p, 'win') ? "victory" : "defeat"}">
+		<td>${runeIDtoImg(getParticipantStat(p, 'perk0'))}</td>
+		<td>${spellIDtoImg(p.spell1Id)}${spellIDtoImg(p.spell2Id)}</td>
+		<td>${getParticipantStat(p, 'champLevel')}</td>
+		<td><div class="champion-cell"><span class="champion-name">${gameDataManager.getChampionName(p.championId) || ''}</span>${championIDtoImg(p.championId)}</div></td>
+		<td>${getParticipantName(match, p)}</td>
+		<td class="tal">${itemIDtoImg(getParticipantStat(p, 'item0'))}
+		${itemIDtoImg(getParticipantStat(p, 'item1'))}
+		${itemIDtoImg(getParticipantStat(p, 'item2'))}
+		${itemIDtoImg(getParticipantStat(p, 'item3'))}
+		${itemIDtoImg(getParticipantStat(p, 'item4'))}
+		${itemIDtoImg(getParticipantStat(p, 'item5'))}
+		${itemIDtoImg(getParticipantStat(p, 'item6'), "item-img ms-5")}
+		${itemIDtoImg(getParticipantStat(p, 'roleBoundItem'), "item-img ms-1")}</td>
+		<td>${getParticipantStat(p, 'kills')} / ${getParticipantStat(p, 'deaths')} / ${getParticipantStat(p, 'assists')}</td>
+		<td>${(getParticipantStat(p, 'neutralMinionsKilled') || 0) + (getParticipantStat(p, 'totalMinionsKilled') || 0)}</td>
+		<td>${getParticipantStat(p, 'goldEarned')}</td></tr>`;
+}
+
+// Full stats table: one column per player, one row per stat
+function playerStatsTemplate(match, isArena) {
+	// Collect all available stats from all participants (use original order for comprehensive stat collection)
+	const participant_stat_props = [];
+	for (const participant of match.participants) {
+		for (const prop_name of getParticipantStatNames(participant, isArena)) {
+			if (!participant_stat_props.includes(prop_name)) {
+				participant_stat_props.push(prop_name);
+			}
+		}
+	}
+
+	// Use same participant order as scoreboard - sorted by placement for Arena, original order for others
+	const orderedParticipants = isArena ? getArenaOrderedParticipants(match) : match.participants;
+
+	return html`<table class="table table-striped mt-5"><thead class="sticky">
+		<tr><th>Summoner Name</th>${orderedParticipants.map(p => html`<th>${getParticipantName(match, p)}</th>`)}</tr>
+		<tr><th>Champion</th>${orderedParticipants.map(p => html`<th><div class="champion-header">${championIDtoImg(p.championId)}<div class="champion-name">${gameDataManager.getChampionName(p.championId) || ''}</div></div></th>`)}</tr>
+		</thead><tbody>${participant_stat_props.map(prop_name => html`<tr><td class="tal fw-bold">${statDisplayName(prop_name)}</td>${orderedParticipants.map(p => statCellTemplate(p, prop_name))}</tr>`)}</tbody></table>`;
+}
+
+function statCellTemplate(participant, statName) {
+	const statValue = getParticipantStat(participant, statName);
+	if (statValue === null || statValue === undefined) {
+		return html`<td></td>`;
+	}
+	if (stat_value_override[statName]) {
+		return html`<td>${stat_value_override[statName](statValue)}</td>`;
+	}
+	const classes = statValue === true ? "bool-true" : statValue === false ? "bool-false" : nothing;
+	return html`<td class=${classes}>${String(statValue)}</td>`;
 }
 
 // Page usage shown with parameter errors: example links plus the expected URL format
-function paramHelpHtml() {
-	const examples = Object.entries(CONFIG.EXAMPLE_PRESETS)
-		.map(([key, [, , label]]) => `<li><a href="?example=${encodeURIComponent(key)}">${escapeHtml(label)}</a></li>`)
-		.join("");
-	return `<p class="mb-1 fw-semibold">Examples</p><ul class="mb-3">${examples}</ul>
+function paramHelpTemplate() {
+	return html`<p class="mb-1 fw-semibold">Examples</p>
+		<ul class="mb-3">${Object.entries(CONFIG.EXAMPLE_PRESETS).map(([key, [, , label]]) => html`<li><a href="?example=${encodeURIComponent(key)}">${label}</a></li>`)}</ul>
 		<p class="mb-1 fw-semibold">Link format</p>
 		<code class="d-block text-break">?match=&lt;URL of match JSON&gt;&amp;timeline=&lt;URL of timeline JSON (optional)&gt;</code>
 		<p class="small text-body-secondary mt-2 mb-0">Both URLs should be URL-encoded and point to Riot API match-v4 or match-v5 JSON.</p>`;
 }
 
 function showParamError(err) {
-	// Scripts load in <head>, so this can run before the page body exists
-	if (document.readyState === "loading") {
-		document.addEventListener("DOMContentLoaded", () => showParamError(err), { once: true });
-		return;
-	}
 	console.warn(`[lol-match-stats-viewer] ${err.devMessage}\n` +
 		`Expected: ?match=<url>[&timeline=<url>] or ?example=<${Object.keys(CONFIG.EXAMPLE_PRESETS).join("|")}>. ` +
 		`URLs must be http(s) (relative allowed) and URL-encoded.`);
-	$("scoreboard").innerHTML = `<div class="alert alert-warning mt-5 mx-auto" style="max-width: 640px;">
-		<h4 class="alert-heading">${escapeHtml(err.title)}</h4>
-		<p>${escapeHtml(err.userMessage)}</p>
+	renderInto($("scoreboard"), html`<div class="alert alert-warning mt-5 mx-auto" style="max-width: 640px;">
+		<h4 class="alert-heading">${err.title}</h4>
+		<p>${err.userMessage}</p>
 		<hr>
-		${paramHelpHtml()}
-	</div>`;
+		${paramHelpTemplate()}
+	</div>`);
 	// Nothing to chart without a match
 	["stats-graph-container", "timeline-graph-container", "timeline-explorer"].forEach(id => {
 		const el = $(id);
@@ -1135,18 +1061,16 @@ function handleError(err) {
 		return;
 	}
 	console.error(err);
-	var scoreboard = $("scoreboard");
-	if (scoreboard) {
-		scoreboard.innerHTML = '<div class="alert alert-danger text-center mt-5">' +
-			(err instanceof SyntaxError && /JSON/.test(err.message)
-				? "No match or timeline data provided, or the data could not be loaded. Please select an example or provide valid data sources in the URL."
-				: escapeHtml(err.message || err)) +
-			'</div>';
+	const message = err instanceof SyntaxError && /JSON/.test(err.message)
+		? CONFIG.ERROR_MESSAGES.NO_DATA
+		: String(err.message || err);
+	renderInto($("scoreboard"), html`<div class="alert alert-danger text-center mt-5">${message}</div>`);
+	const statsGraph = $("stats-graph");
+	if (statsGraph) {
+		Plotly.purge(statsGraph);
+		renderInto(statsGraph, nothing);
 	}
-	var statsGraph = $("stats-graph");
-	if (statsGraph) statsGraph.innerHTML = "";
-	var playerStats = $("player-stats");
-	if (playerStats) playerStats.innerHTML = "";
+	renderInto($("player-stats"), nothing);
 }
 
 // Function to get the category for a stat
@@ -1355,120 +1279,107 @@ function buildTimelineEvents(match) {
         }
     }
 
-    // Sort by timestamp
+    // Sort by timestamp, then number the events so list rows can be keyed by them
     events.sort((a, b) => a.sortKey - b.sortKey);
+    events.forEach((e, i) => { e.id = i; });
     return events;
 }
 
 // ===== Timeline Explorer Filters =====
-function populateTimelineFilter(match) {
-    const container = $('timeline-filter');
-    if (!container) return;
 
-    // Only build once
-    if (container.dataset.ready === '1') return;
+const TIMELINE_EVENT_TYPES = [
+    { value: 'kill', label: 'Champion Kills' },
+    { value: 'objective', label: 'Neutral Objectives' },
+    { value: 'building', label: 'Buildings' },
+    { value: 'item', label: 'Items (purchases, sells, consumes)' }
+];
 
-    const typeSection = `
+// Timeline Explorer state: the current match's events (built once) and the filter selections.
+// An empty selection doesn't filter at all, so unchecking everything shows every event.
+const timelineExplorer = {
+    match: null,
+    events: [],
+    types: new Set(['kill', 'objective', 'building']),
+    champions: new Set()
+};
+
+const teamBadgeClass = (teamId) => teamId === 100 ? 'bg-primary' : teamId === 200 ? 'bg-danger' : 'bg-secondary';
+const teamLabel = (teamId) => teamId === 100 ? 'Blue' : teamId === 200 ? 'Red' : 'Team';
+const teamImgClass = (teamId) => teamId === 100 ? 'team-blue' : teamId === 200 ? 'team-red' : 'team-other';
+
+function toggleSetValue(set, value, present) {
+    if (present) set.add(value);
+    else set.delete(value);
+}
+
+function timelineFilterTemplate(match) {
+    const byTeam = { 100: [], 200: [], other: [] };
+    for (const p of match.participants || []) {
+        if (p.teamId === 100) byTeam[100].push(p);
+        else if (p.teamId === 200) byTeam[200].push(p);
+        else byTeam.other.push(p);
+    }
+
+    const championCheckbox = (p) => {
+        const id = `tl-champ-${p.participantId}`;
+        return html`
+            <div class="form-check">
+                <input class="form-check-input timeline-champ" type="checkbox" id=${id} value=${p.participantId} data-team=${p.teamId}
+                    .checked=${live(timelineExplorer.champions.has(p.participantId))}
+                    @change=${(ev) => {
+                        toggleSetValue(timelineExplorer.champions, p.participantId, ev.target.checked);
+                        renderTimelineExplorer(match);
+                    }}>
+                <label class="form-check-label d-flex align-items-center" for=${id}>${championIDtoImg(p.championId, `champion-img me-1 ${teamImgClass(p.teamId)}`)}<span class="ms-1">${getParticipantName(match, p)}</span></label>
+            </div>`;
+    };
+
+    // Blue/Red badges toggle the whole team: uncheck all if all are checked, otherwise check all
+    const toggleTeam = (ev, teamId) => {
+        ev.preventDefault();
+        const ids = byTeam[teamId].map(p => p.participantId);
+        const allChecked = ids.every(id => timelineExplorer.champions.has(id));
+        ids.forEach(id => toggleSetValue(timelineExplorer.champions, id, !allChecked));
+        renderTimelineExplorer(match);
+    };
+
+    return html`
         <div class="stat-category">
             <h5>Event Types</h5>
-            <div class="form-check">
-                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-kill" value="kill" checked>
-                <label class="form-check-label" for="tl-type-kill">Champion Kills</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-objective" value="objective" checked>
-                <label class="form-check-label" for="tl-type-objective">Neutral Objectives</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-building" value="building" checked>
-                <label class="form-check-label" for="tl-type-building">Buildings</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input timeline-type" type="checkbox" id="tl-type-item" value="item">
-                <label class="form-check-label" for="tl-type-item">Items (purchases, sells, consumes)</label>
-            </div>
+            ${TIMELINE_EVENT_TYPES.map(type => html`
+                <div class="form-check">
+                    <input class="form-check-input timeline-type" type="checkbox" id="tl-type-${type.value}" value=${type.value}
+                        .checked=${live(timelineExplorer.types.has(type.value))}
+                        @change=${(ev) => {
+                            toggleSetValue(timelineExplorer.types, type.value, ev.target.checked);
+                            renderTimelineExplorer(match);
+                        }}>
+                    <label class="form-check-label" for="tl-type-${type.value}">${type.label}</label>
+                </div>`)}
+        </div>
+        <div class="stat-category mt-3">
+            <h5>Champions</h5>
+            ${byTeam[100].length ? html`
+                <div class="mb-2"><a href="#" class="tl-team-toggle badge bg-primary text-decoration-none me-2" data-team="100" @click=${(ev) => toggleTeam(ev, 100)}>Blue</a></div>
+                ${byTeam[100].map(championCheckbox)}` : nothing}
+            ${byTeam[200].length ? html`
+                <div class="mt-2 mb-2"><a href="#" class="tl-team-toggle badge bg-danger text-decoration-none me-2" data-team="200" @click=${(ev) => toggleTeam(ev, 200)}>Red</a></div>
+                ${byTeam[200].map(championCheckbox)}` : nothing}
+            ${byTeam.other.length ? html`
+                <div class="mt-2 mb-2"><span class="badge bg-secondary me-2">Other</span></div>
+                ${byTeam.other.map(championCheckbox)}` : nothing}
         </div>`;
-
-    // Teams selector removed per requirements. Team toggles are now integrated in the Champions section below.
-
-    // Champions section (participants)
-    const byTeam = { 100: [], 200: [], other: [] };
-    if (match && Array.isArray(match.participants)) {
-        for (const p of match.participants) {
-            if (p.teamId === 100) byTeam[100].push(p);
-            else if (p.teamId === 200) byTeam[200].push(p);
-            else byTeam.other.push(p);
-        }
-    }
-
-    function championCheckbox(p) {
-        const id = `tl-champ-${p.participantId}`;
-        const label = `${getParticipantName(match, p)}`;
-        const teamCls = p.teamId === 100 ? 'team-blue' : p.teamId === 200 ? 'team-red' : 'team-other';
-        const icon = championIDtoImg(p.championId, `champion-img me-1 ${teamCls}`);
-        return `
-            <div class="form-check">
-                <input class="form-check-input timeline-champ" type="checkbox" id="${id}" value="${p.participantId}" data-team="${p.teamId}" checked>
-                <label class="form-check-label d-flex align-items-center" for="${id}">${icon}<span class="ms-1">${escapeHtml(label)}</span></label>
-            </div>`;
-    }
-
-    let champsHtml = '<div class="stat-category mt-3"><h5>Champions</h5>';
-    if (byTeam[100].length) {
-        champsHtml += '<div class="mb-2"><a href="#" class="tl-team-toggle badge bg-primary text-decoration-none me-2" data-team="100">Blue</a></div>';
-        champsHtml += byTeam[100].map(championCheckbox).join('');
-    }
-    if (byTeam[200].length) {
-        champsHtml += '<div class="mt-2 mb-2"><a href="#" class="tl-team-toggle badge bg-danger text-decoration-none me-2" data-team="200">Red</a></div>';
-        champsHtml += byTeam[200].map(championCheckbox).join('');
-    }
-    if (byTeam.other.length) {
-        champsHtml += '<div class="mt-2 mb-2"><span class="badge bg-secondary me-2">Other</span></div>';
-        champsHtml += byTeam.other.map(championCheckbox).join('');
-    }
-    champsHtml += '</div>';
-
-    container.innerHTML = typeSection + champsHtml;
-    container.dataset.ready = '1';
-
-    // Re-render timeline on any filter change
-    container.addEventListener('change', () => {
-        renderTimelineExplorer(match);
-    });
-
-    // Handle Blue/Red team toggles: unify then toggle all checkboxes for that team
-    container.addEventListener('click', (ev) => {
-        const toggle = ev.target.closest('.tl-team-toggle');
-        if (!toggle) return;
-        ev.preventDefault();
-        const teamId = parseInt(toggle.getAttribute('data-team'), 10);
-        const boxes = Array.from(container.querySelectorAll(`.timeline-champ[data-team="${teamId}"]`));
-        if (boxes.length === 0) return;
-        const allChecked = boxes.every(cb => cb.checked);
-        const targetState = !allChecked; // if all checked -> uncheck all; otherwise check all
-        boxes.forEach(cb => { cb.checked = targetState; });
-        // Re-render since programmatic changes may not emit change events
-        renderTimelineExplorer(match);
-    });
 }
 
-function getSelectedTimelineFilters() {
-    const types = Array.from(document.querySelectorAll('.timeline-type:checked')).map(cb => cb.value);
-    const champions = Array.from(document.querySelectorAll('.timeline-champ:checked')).map(cb => parseInt(cb.value));
-    return { types, champions };
-}
-
-function eventMatchesFilters(e, filters) {
+function eventMatchesFilters(e) {
     // Type filter
-    if (filters.types && filters.types.length) {
+    if (timelineExplorer.types.size) {
         const t = e.groupType || e.kind; // fallback
-        if (!filters.types.includes(t)) return false;
+        if (!timelineExplorer.types.has(t)) return false;
     }
-
-    // Team filter removed per requirements; team toggling is handled via champion selections
 
     // Champion filter
-    if (filters.champions && filters.champions.length) {
+    if (timelineExplorer.champions.size) {
         let participants = [];
         if (e.kind === 'kill') {
             if (e.killer && e.killer.participantId) participants.push(e.killer.participantId);
@@ -1479,7 +1390,7 @@ function eventMatchesFilters(e, filters) {
         } else {
             if (e.killer && e.killer.participantId) participants.push(e.killer.participantId);
         }
-        if (!participants.some(pid => filters.champions.includes(pid))) {
+        if (!participants.some(pid => timelineExplorer.champions.has(pid))) {
             return false;
         }
     }
@@ -1487,222 +1398,138 @@ function eventMatchesFilters(e, filters) {
     return true;
 }
 
-// Render the timeline explorer UI
+// Display name of a neutral objective, e.g. "infernal dragon", "baron nashor"
+function monsterName(e) {
+    const mType = ((e.monsterType || '') + '').toUpperCase();
+    const mSub = ((e.monsterSubType || '') + '').toUpperCase();
+    if (mType === 'DRAGON' && mSub) {
+        return `${mSub.replace(/_/g, ' ').toLowerCase()} dragon`;
+    } else if (mType === 'RIFTHERALD' || mType === 'RIFT_HERALD') {
+        return 'rift herald';
+    } else if (mType === 'BARON_NASHOR') {
+        return 'baron nashor';
+    } else if (mType === 'HORDE') {
+        return 'grub';
+    }
+    return (e.monsterType || '').toString().replace(/_/g, ' ').toLowerCase();
+}
+
+// Display name of a destroyed structure, e.g. "mid lane outer turret", "top lane inhibitor"
+function buildingName(e) {
+    const lane = (e.laneType || '').toString().replace(/_/g, ' ').toLowerCase();
+    if (e.subtype === 'INHIBITOR_KILL' || (e.buildingType || '') === 'INHIBITOR_BUILDING') {
+        return `${lane ? lane + ' ' : ''}inhibitor`.trim();
+    }
+    if ((e.buildingType || '') === 'TOWER_BUILDING') {
+        const tower = (e.towerType || '').toString().replace(/_/g, ' ').toLowerCase();
+        return `${lane ? lane + ' ' : ''}${tower || 'tower'}`.trim();
+    }
+    return 'structure';
+}
+
+// One explorer row: cells for time | actor | action | target | extra (assists). The row is a subgrid
+// of the list's shared columns, so every cell lines up with the same cell in the other rows.
+function timelineRowTemplate(match, e) {
+    const teamBadge = (teamId) => html`<span class="badge tl-team-badge ${teamBadgeClass(teamId)}">${teamLabel(teamId)}</span>`;
+    // Champion icon + team badge + player name
+    const actorTemplate = (participant, teamId) => html`${championIDtoImg(participant.championId, `champion-img ${teamImgClass(teamId)}`)}${teamBadge(teamId)}<span>${getParticipantName(match, participant)}</span>`;
+
+    // Subtle background tint for the entire row based on the killer/purchaser team
+    let rowTeamId;
+    let actor = nothing, action = nothing, target = nothing, extra = nothing;
+    let actionClass = '', extraClass = '';
+
+    if (e.kind === 'kill') {
+        rowTeamId = e.killerTeamId;
+        actor = e.killer ? actorTemplate(e.killer, e.killerTeamId) : 'Someone';
+        action = 'killed';
+        target = e.victim
+            ? html`${championIDtoImg(e.victim.championId, `champion-img ${teamImgClass(e.victimTeamId)}`)}<span>${getParticipantName(match, e.victim)}</span>`
+            : 'a champion';
+        if (e.assists && e.assists.length > 0) {
+            extraClass = ' timeline-assists text-muted';
+            extra = html`<span class="me-1">Assisted by:</span>${e.assists.map(aId => {
+                const ap = getParticipantById(match, aId);
+                // Hover tooltip: the assisting player's name
+                return ap ? championIDtoImg(ap.championId, `champion-img assist-icon ${teamImgClass(ap.teamId)}`, getParticipantName(match, ap)) : nothing;
+            })}`;
+        }
+    } else if (e.kind === 'objective') {
+        // Prefer the event's team, else the killer's team if available
+        const effTeamId = (e.teamId !== undefined && e.teamId !== null)
+            ? e.teamId
+            : (e.killer && e.killer.teamId !== undefined)
+                ? e.killer.teamId
+                : undefined;
+        rowTeamId = effTeamId;
+
+        // Show killer (participant) when available, otherwise show team badge
+        if (e.killer) {
+            actor = actorTemplate(e.killer, effTeamId);
+        } else if (effTeamId) {
+            actor = teamBadge(effTeamId);
+        }
+
+        if (e.subtype === 'ELITE_MONSTER_KILL') {
+            action = 'secured';
+            target = html`<span class="badge bg-success">${monsterName(e)}</span>`;
+        } else if (e.subtype === 'BUILDING_KILL' || e.subtype === 'INHIBITOR_KILL') {
+            action = 'destroyed';
+            target = html`<span class="badge text-bg-warning">${buildingName(e)}</span>`;
+        } else {
+            action = 'captured an objective';
+        }
+    } else if (e.kind === 'item') {
+        rowTeamId = e.teamId; // purchaser's team
+        actor = e.participant ? actorTemplate(e.participant, e.teamId) : teamBadge(e.teamId);
+        actionClass = ' text-muted';
+        action = e.action || 'updated items';
+
+        // Item icons
+        const isConsumed = e.action === 'consumed';
+        const isUndone = e.action === 'undid';
+        if (e.beforeId && e.afterId) {
+            // Show transform/undo as before -> after
+            const cls = `item-img${isUndone ? ' grayscale' : ''}`;
+            target = html`${itemIDtoImg(e.beforeId, cls)}<span>→</span>${itemIDtoImg(e.afterId, cls)}`;
+        } else if (e.itemId) {
+            target = itemIDtoImg(e.itemId, `item-img${(isConsumed || isUndone) ? ' grayscale' : ''}`);
+        }
+    }
+
+    const rowClass = rowTeamId === 100 ? ' tl-row-blue' : rowTeamId === 200 ? ' tl-row-red' : '';
+    return html`<li class="list-group-item tl-row${rowClass}">
+        <div class="tl-cell"><span class="badge rounded-pill bg-secondary">${standardTimestamp(e.t)}</span></div>
+        <div class="tl-cell">${actor}</div>
+        <div class="tl-cell${actionClass}">${action}</div>
+        <div class="tl-cell">${target}</div>
+        <div class="tl-cell${extraClass}">${extra}</div>
+    </li>`;
+}
+
+// Render the timeline explorer UI (filters and event list) from the current filter state
 function renderTimelineExplorer(match) {
     const list = $('timeline-explorer-list');
     if (!list) return; // Section may not exist
 
-    // Clear current content
-    list.innerHTML = '';
-
     if (!match || !match.frames) {
-        list.innerHTML = '<li class="list-group-item">No timeline data available for this match.</li>';
+        renderInto(list, html`<li class="list-group-item">No timeline data available for this match.</li>`);
         return;
     }
 
-    // Ensure filters are built
-    populateTimelineFilter(match);
-
-    const events = buildTimelineEvents(match);
-    // Apply filters
-    const filters = getSelectedTimelineFilters();
-    const filtered = events.filter(e => eventMatchesFilters(e, filters));
-
-    if (filtered.length === 0) {
-        list.innerHTML = '<li class="list-group-item">No timeline events match the selected filters.</li>';
-        return;
+    // New match: build its events once and start with every champion selected
+    if (timelineExplorer.match !== match) {
+        timelineExplorer.match = match;
+        timelineExplorer.events = buildTimelineEvents(match);
+        timelineExplorer.champions = new Set((match.participants || []).map(p => p.participantId));
     }
 
-    const badgeForTeam = (teamId) => teamId === 100 ? 'bg-primary' : teamId === 200 ? 'bg-danger' : 'bg-secondary';
-    const teamLabel = (teamId) => teamId === 100 ? 'Blue' : teamId === 200 ? 'Red' : 'Team';
-    const teamImgCls = (teamId) => teamId === 100 ? 'team-blue' : teamId === 200 ? 'team-red' : 'team-other';
+    renderInto($('timeline-filter'), timelineFilterTemplate(match));
 
-    // Each row is a subgrid of the list's shared columns (time | actor | action | target | extra),
-    // so every cell lines up with the same cell in the rows above and below it.
-    const makeCell = () => {
-        const cell = document.createElement('div');
-        cell.className = 'tl-cell';
-        return cell;
-    };
-    const teamBadgeHtml = (teamId) => `<span class="badge tl-team-badge ${badgeForTeam(teamId)}">${teamLabel(teamId)}</span>`;
-    // Champion icon + team badge + player name
-    const fillActor = (cell, participant, teamId) => {
-        cell.insertAdjacentHTML('beforeend', championIDtoImg(participant.championId, `champion-img ${teamImgCls(teamId)}`));
-        cell.insertAdjacentHTML('beforeend', teamBadgeHtml(teamId));
-        const name = document.createElement('span');
-        name.textContent = getParticipantName(match, participant);
-        cell.appendChild(name);
-    };
-
-    for (const e of filtered) {
-        const li = document.createElement('li');
-        li.className = 'list-group-item tl-row';
-
-        // Apply a subtle background tint for the entire row based on the killer/purchaser team
-        let rowTeamId;
-        if (e.kind === 'kill') {
-            rowTeamId = e.killerTeamId;
-        } else if (e.kind === 'item') {
-            rowTeamId = e.teamId; // purchaser's team
-        } else if (e.kind === 'objective') {
-            // prefer event teamId, else killer's team if available
-            rowTeamId = (e.teamId !== undefined && e.teamId !== null) ? e.teamId : (e.killer ? e.killer.teamId : undefined);
-        }
-        if (rowTeamId === 100) {
-            li.classList.add('tl-row-blue');
-        } else if (rowTeamId === 200) {
-            li.classList.add('tl-row-red');
-        }
-
-        const timeCell = makeCell();
-        const actorCell = makeCell();
-        const actionCell = makeCell();
-        const targetCell = makeCell();
-        const extraCell = makeCell();
-
-        const timeBadge = document.createElement('span');
-        timeBadge.className = 'badge rounded-pill bg-secondary';
-        timeBadge.textContent = standardTimestamp(e.t);
-        timeCell.appendChild(timeBadge);
-
-        if (e.kind === 'kill') {
-            if (e.killer) {
-                fillActor(actorCell, e.killer, e.killerTeamId);
-            } else {
-                actorCell.textContent = 'Someone';
-            }
-
-            actionCell.textContent = 'killed';
-
-            if (e.victim) {
-                targetCell.insertAdjacentHTML('beforeend', championIDtoImg(e.victim.championId, `champion-img ${teamImgCls(e.victimTeamId)}`));
-                const vSpan = document.createElement('span');
-                vSpan.textContent = getParticipantName(match, e.victim);
-                targetCell.appendChild(vSpan);
-            } else {
-                targetCell.textContent = 'a champion';
-            }
-
-            if (e.assists && e.assists.length > 0) {
-                extraCell.classList.add('timeline-assists', 'text-muted');
-
-                const label = document.createElement('span');
-                label.className = 'me-1';
-                label.textContent = 'Assisted by:';
-                extraCell.appendChild(label);
-
-                for (const aId of e.assists) {
-                    const ap = getParticipantById(match, aId);
-                    if (ap) {
-                        extraCell.insertAdjacentHTML('beforeend', championIDtoImg(ap.championId, `champion-img assist-icon ${teamImgCls(ap.teamId)}`));
-                        // Hover tooltip: the assisting player's name
-                        extraCell.lastElementChild.title = getParticipantName(match, ap);
-                    }
-                }
-            }
-        } else if (e.kind === 'objective') {
-            // Show killer (participant) when available, otherwise show team badge
-            const effTeamId = (e.teamId !== undefined && e.teamId !== null)
-                ? e.teamId
-                : (e.killer && e.killer.teamId !== undefined)
-                    ? e.killer.teamId
-                    : undefined;
-
-            if (e.killer) {
-                fillActor(actorCell, e.killer, effTeamId);
-            } else if (effTeamId) {
-                actorCell.insertAdjacentHTML('beforeend', teamBadgeHtml(effTeamId));
-            }
-
-            if (e.subtype === 'ELITE_MONSTER_KILL') {
-                // Compute neutral objective name and show it as a green badge
-                const mType = ((e.monsterType || '') + '').toUpperCase();
-                const mSub = ((e.monsterSubType || '') + '').toUpperCase();
-                let monster;
-                if (mType === 'DRAGON' && mSub) {
-                    monster = `${mSub.replace(/_/g, ' ').toLowerCase()} dragon`;
-                } else if (mType === 'RIFTHERALD' || mType === 'RIFT_HERALD') {
-                    monster = 'rift herald';
-                } else if (mType === 'BARON_NASHOR') {
-                    monster = 'baron nashor';
-                } else if (mType === 'HORDE') {
-                    monster = 'grub';
-                } else {
-                    monster = (e.monsterType || '').toString().replace(/_/g, ' ').toLowerCase();
-                }
-
-                actionCell.textContent = 'secured';
-
-                const objBadge = document.createElement('span');
-                objBadge.className = 'badge bg-success';
-                objBadge.textContent = monster;
-                targetCell.appendChild(objBadge);
-            } else if (e.subtype === 'BUILDING_KILL') {
-                const lane = (e.laneType || '').toString().replace(/_/g, ' ').toLowerCase();
-                const tower = (e.towerType || '').toString().replace(/_/g, ' ').toLowerCase();
-
-                let buildingName;
-                if ((e.buildingType || '') === 'TOWER_BUILDING') {
-                    buildingName = `${lane ? lane + ' ' : ''}${tower || 'tower'}`.trim();
-                } else if ((e.buildingType || '') === 'INHIBITOR_BUILDING') {
-                    buildingName = `${lane ? lane + ' ' : ''}inhibitor`.trim();
-                } else {
-                    buildingName = 'structure';
-                }
-
-                actionCell.textContent = 'destroyed';
-
-                const bBadge = document.createElement('span');
-                bBadge.className = 'badge text-bg-warning';
-                bBadge.textContent = buildingName;
-                targetCell.appendChild(bBadge);
-            } else if (e.subtype === 'INHIBITOR_KILL') {
-                const lane = (e.laneType || '').toString().replace(/_/g, ' ').toLowerCase();
-                const buildingName = `${lane ? lane + ' ' : ''}inhibitor`.trim();
-
-                actionCell.textContent = 'destroyed';
-
-                const bBadge = document.createElement('span');
-                bBadge.className = 'badge text-bg-warning';
-                bBadge.textContent = buildingName;
-                targetCell.appendChild(bBadge);
-            } else {
-                actionCell.textContent = 'captured an objective';
-            }
-        } else if (e.kind === 'item') {
-            if (e.participant) {
-                fillActor(actorCell, e.participant, e.teamId);
-            } else {
-                actorCell.insertAdjacentHTML('beforeend', teamBadgeHtml(e.teamId));
-            }
-
-            // Action description
-            actionCell.classList.add('text-muted');
-            actionCell.textContent = e.action || 'updated items';
-
-            // Item icons
-            if (e.itemId || e.beforeId || e.afterId) {
-                const isConsumed = e.action === 'consumed';
-                const isUndone = e.action === 'undid';
-                if (e.beforeId && e.afterId) {
-                    // Show transform/undo as before -> after
-                    const beforeCls = `item-img${isUndone ? ' grayscale' : ''}`;
-                    targetCell.insertAdjacentHTML('beforeend', itemIDtoImg(e.beforeId, beforeCls));
-                    const arrow = document.createElement('span');
-                    arrow.textContent = '→';
-                    targetCell.appendChild(arrow);
-                    const afterCls = `item-img${isUndone ? ' grayscale' : ''}`;
-                    targetCell.insertAdjacentHTML('beforeend', itemIDtoImg(e.afterId, afterCls));
-                } else if (e.itemId) {
-                    const cls = `item-img${(isConsumed || isUndone) ? ' grayscale' : ''}`;
-                    targetCell.insertAdjacentHTML('beforeend', itemIDtoImg(e.itemId, cls));
-                }
-            }
-        }
-
-        li.append(timeCell, actorCell, actionCell, targetCell, extraCell);
-        list.appendChild(li);
-    }
+    const filtered = timelineExplorer.events.filter(eventMatchesFilters);
+    renderInto(list, filtered.length === 0
+        ? html`<li class="list-group-item">No timeline events match the selected filters.</li>`
+        : html`${repeat(filtered, e => e.id, e => timelineRowTemplate(match, e))}`);
 }
 
 // ===== Timeline Graphs =====
@@ -1800,25 +1627,21 @@ window.addEventListener('themechange', () => {
     });
 });
 
+// Timeline Graphs controls state: the selected stat (the mode and kill toggle are static form controls)
+const timelineGraphControls = { ready: false, stat: TIMELINE_STAT_OPTIONS[0].key };
+
 function getSelectedTimelineStat() {
-    const checked = document.querySelector('.timeline-stat-radio:checked');
-    return checked ? checked.value : TIMELINE_STAT_OPTIONS[0].key;
+    return timelineGraphControls.stat;
 }
 
 function populateTimelineGraphControls(match) {
-    const oldStatSelector = $('timeline-stat-selector');
+    const statSelector = $('timeline-stat-selector');
     const modeSelector = $('timeline-mode-selector');
-    if (!oldStatSelector || !modeSelector) return;
+    if (!statSelector || !modeSelector) return;
 
     // Only build once
-    if (oldStatSelector.dataset.ready === '1') return;
-
-    // Replace the placeholder (a Bootstrap .form-select div, which paints a dropdown
-    // arrow even though it holds radio buttons, not a <select>) with a plain container.
-    const statSelectorContainer = document.createElement('div');
-    statSelectorContainer.id = 'timeline-stat-selector';
-    statSelectorContainer.dataset.ready = '1';
-    oldStatSelector.parentNode.replaceChild(statSelectorContainer, oldStatSelector);
+    if (timelineGraphControls.ready) return;
+    timelineGraphControls.ready = true;
 
     const hasDamage = timelineHasDamageStats(match);
     const availableStats = TIMELINE_STAT_OPTIONS.filter(opt => !opt.requiresDamage || hasDamage);
@@ -1829,17 +1652,20 @@ function populateTimelineGraphControls(match) {
         statsByCategory[opt.category].push(opt);
     });
 
-    statSelectorContainer.innerHTML = Object.entries(statsByCategory).map(([categoryName, opts]) => `
+    renderInto(statSelector, html`${Object.entries(statsByCategory).map(([categoryName, opts]) => html`
         <div class="stat-category">
-            <h5>${escapeHtml(categoryName)}</h5>
-            ${opts.map(opt => `
+            <h5>${categoryName}</h5>
+            ${opts.map(opt => html`
                 <div class="form-check">
-                    <input class="form-check-input timeline-stat-radio" type="radio" name="timeline-stat" id="tl-stat-${opt.key}" value="${opt.key}" ${opt.key === 'totalGold' ? 'checked' : ''}>
-                    <label class="form-check-label" for="tl-stat-${opt.key}">${escapeHtml(opt.label)}</label>
-                </div>`).join('')}
-        </div>`).join('');
-
-    statSelectorContainer.addEventListener('change', () => renderTimelineGraph(match));
+                    <input class="form-check-input timeline-stat-radio" type="radio" name="timeline-stat" id="tl-stat-${opt.key}" value=${opt.key}
+                        .checked=${opt.key === timelineGraphControls.stat}
+                        @change=${() => {
+                            timelineGraphControls.stat = opt.key;
+                            renderTimelineGraph(match);
+                        }}>
+                    <label class="form-check-label" for="tl-stat-${opt.key}">${opt.label}</label>
+                </div>`)}
+        </div>`)}`);
 
     const isArena = isArenaMatch(match);
     const modeOptions = [
@@ -1851,7 +1677,7 @@ function populateTimelineGraphControls(match) {
     }
     // Default to the gold difference view when available (not applicable to Arena matches)
     const defaultMode = isArena ? 'player' : 'diff';
-    modeSelector.innerHTML = modeOptions.map(opt => `<option value="${opt.value}"${opt.value === defaultMode ? ' selected' : ''}>${escapeHtml(opt.label)}</option>`).join('');
+    renderInto(modeSelector, html`${modeOptions.map(opt => html`<option value=${opt.value} ?selected=${opt.value === defaultMode}>${opt.label}</option>`)}`);
 
     modeSelector.addEventListener('change', () => renderTimelineGraph(match));
     const showKillsCheckbox = $('timeline-show-kills-checkbox');
@@ -1876,7 +1702,7 @@ function renderTimelineGraph(match) {
     if (!container) return;
 
     if (!match || !match.mtValid || !match.frames || match.frames.length === 0) {
-        container.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 15%;">No timeline data available for this match.</div>';
+        DOMUtils.showChartMessage(container, 'No timeline data available for this match.', '15%');
         return;
     }
 
@@ -2053,6 +1879,7 @@ function renderTimelineGraph(match) {
         }
     };
 
+    DOMUtils.clearChartMessage(container);
     Plotly.newPlot(container, traces, layout, config);
 }
 
@@ -2068,22 +1895,26 @@ function buildPlayerTrace(match, participant, values, minutesAxis, timeHover, st
     };
 }
 
+// Match Statistics stat checkboxes: the stats grouped by category, and which ones are selected
+const statSelector = { match: null, categories: {}, selected: new Set() };
+
+// Selected stats in the order they appear in the selector
+function getSelectedStats() {
+	return Object.values(statSelector.categories).flat().filter(statName => statSelector.selected.has(statName));
+}
+
+// Redraw the Match Statistics chart for the current selection and chart options
+function updateStatsGraph() {
+	const selectedStats = getSelectedStats();
+	if (selectedStats.length > 0) {
+		createMultiStatsGraph(statSelector.match, selectedStats);
+	} else {
+		DOMUtils.showChartMessage($("stats-graph"), "Please select at least one stat to display", "25%");
+	}
+}
+
 function populateStatSelector(match) {
 	const isArena = isArenaMatch(match);
-	const statSelectorContainer = $("stat-selector").parentElement;
-	const oldSelector = $("stat-selector");
-	const statCheckboxContainer = document.createElement("div");
-
-	statCheckboxContainer.id = "stat-checkbox-container";
-	statCheckboxContainer.className = "stat-checkbox-container overflow-auto";
-	statCheckboxContainer.style.maxHeight = "600px";
-	statCheckboxContainer.style.width = "100%";
-	statCheckboxContainer.style.border = "1px solid var(--bs-border-color)";
-	statCheckboxContainer.style.borderRadius = "0.25rem";
-	statCheckboxContainer.style.padding = "10px";
-
-	oldSelector.parentNode.replaceChild(statCheckboxContainer, oldSelector);
-
 	const availableStats = [];
 
 	// Add prioritized stats first
@@ -2111,77 +1942,27 @@ function populateStatSelector(match) {
 		}
 	}
 
-	const sortedStats = getSortedStats(availableStats);
+	statSelector.match = match;
+	statSelector.categories = getSortedStats(availableStats);
+	statSelector.selected = new Set(availableStats.filter(statName => statName === 'totalDamageDealtToChampions'));
+	renderStatSelector();
+}
 
-	// Create checkboxes for each stat category
-	for (const categoryName in sortedStats) {
-		const categoryDiv = document.createElement('div');
-		categoryDiv.className = 'stat-category';
-
-		const categoryHeader = document.createElement('h5');
-		categoryHeader.textContent = categoryName;
-		categoryDiv.appendChild(categoryHeader);
-
-		sortedStats[categoryName].forEach(statName => {
-			const checkboxDiv = document.createElement('div');
-			checkboxDiv.className = 'form-check';
-
-			const checkbox = document.createElement('input');
-			checkbox.type = 'checkbox';
-			checkbox.className = 'form-check-input stat-checkbox';
-			checkbox.id = `stat-${statName}`;
-			checkbox.value = statName;
-			checkbox.dataset.stat = statName;
-
-			checkbox.checked = (statName === 'totalDamageDealtToChampions');
-
-			const label = document.createElement('label');
-			label.className = 'form-check-label';
-			label.htmlFor = `stat-${statName}`;
-
-			if (stat_name_translation[statName]) {
-				label.textContent = stat_name_translation[statName];
-			} else {
-				label.textContent = camelToTitleCase(statName);
-			}
-
-			checkbox.addEventListener('change', function () {
-				const selectedStats = getSelectedStats();
-				if (selectedStats.length > 0) {
-					createMultiStatsGraph(match, selectedStats);
-				} else if (selectedStats.length === 0) {
-					const graphContainer = $("stats-graph");
-					graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
-				}
-			});
-
-			checkboxDiv.appendChild(checkbox);
-			checkboxDiv.appendChild(label);
-			categoryDiv.appendChild(checkboxDiv);
-		});
-
-		statCheckboxContainer.appendChild(categoryDiv);
-	}
-
-	const sumSelectionsCheckbox = $("sum-selections-checkbox");
-	sumSelectionsCheckbox.addEventListener('change', function () {
-		const selectedStats = getSelectedStats();
-		if (selectedStats.length > 0) {
-			createMultiStatsGraph(match, selectedStats);
-		}
-	});
-
-	const clearAllLink = document.getElementById('clear-all-stats');
-	if (clearAllLink) {
-		clearAllLink.onclick = function (e) {
-			e.preventDefault();
-			document.querySelectorAll('.stat-checkbox:checked').forEach(cb => { cb.checked = false; });
-			const graphContainer = $("stats-graph");
-			if (graphContainer) {
-				graphContainer.innerHTML = '<div class="alert alert-info text-center" style="margin-top: 25%;">Please select at least one stat to display</div>';
-			}
-		};
-	}
+function renderStatSelector() {
+	renderInto($("stat-selector"), html`${Object.entries(statSelector.categories).map(([categoryName, stats]) => html`
+		<div class="stat-category">
+			<h5>${categoryName}</h5>
+			${stats.map(statName => html`
+				<div class="form-check">
+					<input type="checkbox" class="form-check-input stat-checkbox" id="stat-${statName}" value=${statName} data-stat=${statName}
+						.checked=${live(statSelector.selected.has(statName))}
+						@change=${(e) => {
+							toggleSetValue(statSelector.selected, statName, e.target.checked);
+							updateStatsGraph();
+						}}>
+					<label class="form-check-label" for="stat-${statName}">${statDisplayName(statName)}</label>
+				</div>`)}
+		</div>`)}`);
 }
 
 // Function to create a multi-stats graph grouped by player
@@ -2449,6 +2230,7 @@ function createMultiStatsGraph(match, selectedStats) {
 		}
 	};
 
+	DOMUtils.clearChartMessage(graphContainer);
 	Plotly.newPlot(graphContainer, traces, layout, config);
 	$("stats-graph").style.height = "800px";
 }

@@ -380,6 +380,15 @@ table tr:hover {
    Statistics Category and Form Controls
    ========================================================================== */
 
+/* Match Statistics stat checkboxes: a bordered, scrollable box */
+#stat-selector {
+    max-height: 600px;
+    width: 100%;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.25rem;
+    padding: 10px;
+}
+
 .stat-category {
     margin-bottom: 20px;
     padding: 15px;

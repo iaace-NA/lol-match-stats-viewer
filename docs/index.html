@@ -77,7 +77,7 @@
     <!--<script src="timeago.full.min.js"></script>-->
     <script src="queue_groups.js"></script>
     <script src="match.js"></script>
-    <script src="index.js"></script>
+    <script type="module" src="index.js"></script>
 </head>
 
 <body>
@@ -133,8 +133,8 @@
                     </div>
                     <div class="mb-3">
                         <a href="#" id="clear-all-stats" class="form-label" style="cursor:pointer;">Clear All</a>
-                        <!-- The stat-selector will be replaced by the checkbox container in JS -->
-                        <div id="stat-selector" class="form-select"></div>
+                        <!-- Stat checkboxes, rendered by index.js -->
+                        <div id="stat-selector" class="overflow-auto"></div>
                     </div>
                 </div>
                 <div class="col-md-8 col-xxl-9">
@@ -164,8 +164,8 @@
                         <label class="form-check-label" for="timeline-show-kills-checkbox">Show Kill Events</label>
                     </div>
                     <div class="mb-3">
-                        <!-- The timeline-stat-selector will be replaced by the radio group container in JS -->
-                        <div id="timeline-stat-selector" class="form-select"></div>
+                        <!-- Stat radio buttons, rendered by index.js -->
+                        <div id="timeline-stat-selector"></div>
                     </div>
                 </div>
                 <div class="col-md-8 col-xxl-9">
