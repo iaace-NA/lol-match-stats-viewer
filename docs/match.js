@@ -287,7 +287,7 @@ class Match {
 				damageDealtToTurrets: participant.stats.damageDealtToTurrets,
 				damageSelfMitigated: participant.stats.damageSelfMitigated,
 				deaths: participant.stats.deaths,
-				detectorWardPlaced: null,
+				detectorWardsPlaced: null,
 				doubleKills: participant.stats.doubleKills,
 				dragonKills: null,
 				firstBloodAssist: participant.stats.firstBloodAssist,
@@ -298,7 +298,7 @@ class Match {
 				gameEndedInSurrender: null,
 				goldEarned: participant.stats.goldEarned,
 				goldSpent: participant.stats.goldSpent,
-				individualPosition: participant.stats.lane,
+				individualPosition: null, // Riot's per-player position is match-v5 only
 				inhibitorKills: participant.stats.inhibitorKills,
 				inhibitorTakedowns: null,
 				inhibitorsLost: null,
@@ -333,6 +333,10 @@ class Match {
 				physicalDamageDealt: participant.stats.physicalDamageDealt,
 				physicalDamageDealtToChampions: participant.stats.physicalDamageDealtToChampions,
 				physicalDamageTaken: participant.stats.physicalDamageTaken,
+				positionAssignedByMatchmaking: null,
+				// Riot's match-v4 participants have no top-level role (theirs is timeline.role), so one
+				// found there was written by another tool, such as RoleML. Carried as-is for the legacy role.
+				predictedRole: participant.role,
 				profileIcon: participantIdentity?.player.profileIcon,
 				puuid: null,
 				quadraKills: participant.stats.quadraKills,
@@ -354,17 +358,20 @@ class Match {
 				summonerName: participantIdentity?.player.summonerName,
 				teamEarlySurrendered: null,
 				teamId: participant.teamId,
-				teamPosition: participant.stats.lane,
+				teamPosition: null, // Riot's per-team position is match-v5 only
 				timeCCingOthers: participant.stats.timeCCingOthers,
 				timePlayed: null,
+				totalAllyJungleMinionsKilled: participant.stats.neutralMinionsKilledTeamJungle,
 				totalDamageDealt: participant.stats.totalDamageDealt,
 				totalDamageDealtToChampions: participant.stats.totalDamageDealtToChampions,
 				totalDamageShieldedOnTeammates: null,
 				totalDamageTaken: participant.stats.totalDamageTaken,
+				totalEnemyJungleMinionsKilled: participant.stats.neutralMinionsKilledEnemyJungle,
 				totalHeal: participant.stats.totalHeal,
 				totalHealsOnTeammates: null,
 				totalMinionsKilled: participant.stats.totalMinionsKilled,
 				totalTimeCCDealt: participant.stats.totalTimeCrowdControlDealt,
+				totalTimeSpentDead: null,
 				totalUnitsHealed: participant.stats.totalUnitsHealed,
 				tripleKills: participant.stats.tripleKills,
 				trueDamageDealt: participant.stats.trueDamageDealt,
@@ -672,7 +679,11 @@ class Match {
 				role: participant.role,
 				lane: participant.lane,
 			},
-			role: participant.role
+			// Reserved for a role predicted by another tool, such as RoleML, and written over a
+			// match-v4 participant's top-level role in that tool's own labels (RoleML's are top,
+			// jungle, mid, bot, supp). Passed through unchanged; empty for match-v5 and for
+			// match-v4 without a prediction. Riot's own role is timeline.role.
+			role: participant.predictedRole,
 		}));
 
 		// Legacy participant identities format
@@ -799,8 +810,8 @@ class Match {
 			inhibitorKills: participant.inhibitorKills,
 			totalMinionsKilled: participant.totalMinionsKilled,
 			neutralMinionsKilled: participant.neutralMinionsKilled,
-			neutralMinionsKilledTeamJungle: null,
-			neutralMinionsKilledEnemyJungle: null,
+			neutralMinionsKilledTeamJungle: participant.totalAllyJungleMinionsKilled,
+			neutralMinionsKilledEnemyJungle: participant.totalEnemyJungleMinionsKilled,
 			totalTimeCCDealt: participant.totalTimeCCDealt,
 			champLevel: participant.champLevel,
 			visionWardsBoughtInGame: participant.visionWardsBoughtInGame,
@@ -862,6 +873,19 @@ class Match {
 			summoner2Casts: participant.summoner2Casts,
 			totalDamageShieldedOnTeammates: participant.totalDamageShieldedOnTeammates,
 			totalHealsOnTeammates: participant.totalHealsOnTeammates,
+			detectorWardsPlaced: participant.detectorWardsPlaced,
+			totalTimeSpentDead: participant.totalTimeSpentDead,
+			gameEndedInSurrender: participant.gameEndedInSurrender,
+			gameEndedInEarlySurrender: participant.gameEndedInEarlySurrender,
+			teamEarlySurrendered: participant.teamEarlySurrendered,
+			// Where the player played, as match-v5 position names (TOP, JUNGLE, MIDDLE,
+			// BOTTOM, UTILITY). teamPosition assigns one of each per team and is the most
+			// reliable; individualPosition is Riot's guess for the player alone. Both are
+			// match-v5 only, and empty or "Invalid" off Summoner's Rift.
+			teamPosition: participant.teamPosition,
+			individualPosition: participant.individualPosition,
+			// The position matchmaking assigned, which the player may not have played.
+			positionAssignedByMatchmaking: participant.positionAssignedByMatchmaking,
 			// Arena-specific fields
 			placement: participant.placement,
 			playerSubteamId: participant.playerSubteamId,
@@ -1021,5 +1045,5 @@ class Match {
 
 // Dual-environment export: a plain <script> tag (this repo's own docs/index.html)
 // leaves module undefined and just uses the global Match class; a Node require()
-// (e.g. sps depending on this file directly) gets it as a proper export.
+// (e.g. a Node.js project depending on this file directly) gets it as a proper export.
 if (typeof module !== "undefined" && module.exports) module.exports = Match;

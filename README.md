@@ -42,6 +42,28 @@ The project follows modern JavaScript best practices with:
 - `example-data/` - Sample data for development and testing
 - `docs/arena_augments.json` - from https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json
 
+### Legacy view coverage
+
+`Match` stores match-v5 data and exposes a match-v4 shaped view of it (`participants`, `teams`,
+`participantIdentities`, `frames`). `tests/legacy-view-coverage.js` checks that every match-v5 field
+is accounted for in that view: represented, with its value compared, deliberately omitted with a
+reason, or a listed gap where a legacy field exists but the view leaves it empty. A field Riot adds
+fails the check until it gets one of those decisions.
+
+```bash
+node tests/legacy-view-coverage.js
+node tests/legacy-view-coverage.js match.json timeline.json [...]
+```
+
+With no arguments it checks the match-v5 files in `docs/example-data`. Pass match and timeline
+pairs (`-` for no timeline) to check other data without committing it.
+
+Each legacy participant's `stats` carries where the player played, as match-v5 position names
+(`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`): `teamPosition` and `individualPosition`, both
+match-v5 only. A legacy participant's top-level `role` is reserved for a role predicted by another tool, such
+as RoleML, and written over a match-v4 participant's top-level `role`; it is passed through
+unchanged. Riot's role is `timeline.role`.
+
 ## License
 
 GNU Affero General Public License v3.0 (AGPL-3.0) - see LICENSE file for details.
