@@ -52,7 +52,11 @@ const SAME_NAME_STATS = [
 	"summoner1Casts", "summoner2Casts", "totalDamageShieldedOnTeammates",
 	"totalHealsOnTeammates", "detectorWardsPlaced", "totalTimeSpentDead", "gameEndedInSurrender",
 	"gameEndedInEarlySurrender", "teamEarlySurrendered", "teamPosition", "individualPosition",
-	"positionAssignedByMatchmaking",
+	"positionAssignedByMatchmaking", "gameEndedInIGNBSurrender", "teamIGNBSurrendered",
+	"causedGameEndFromIGNBSurrender", "wasAfk", "wasSevereTransgressor", "wasPremadeWithSevereTransgressor",
+	"wasPremadeWithIGNBGameEndCauser", "allInPings", "assistMePings", "basicPings", "commandPings",
+	"dangerPings", "enemyMissingPings", "enemyVisionPings", "getBackPings", "holdPings", "needVisionPings",
+	"onMyWayPings", "pushPings", "retreatPings", "visionClearedPings",
 ];
 
 // Primary style selections become perk0-perk3, secondary style selections perk4-perk5.
@@ -120,6 +124,7 @@ const RULES = [
 	// Participants: statistics
 	...SAME_NAME_STATS.map(name => represented(participant(name), `participants[].stats.${name}`)),
 	represented(participant("magicDamageTaken"), "participants[].stats.magicalDamageTaken"),
+	represented(participant("PlayerBehavior.**"), "participants[].stats.PlayerBehavior.**"),
 	represented(participant("lane"), "participants[].timeline.lane"),
 	represented(participant("role"), "participants[].timeline.role"),
 	represented(participant("perks.styles[].selections[].perk"), captures => perkField(captures, "")),
@@ -142,12 +147,6 @@ const RULES = [
 	// Participants: deliberately omitted
 	...omitted(["challenges.**", "missions.**", ...[...Array(12).keys()].map(n => `PlayerScore${n}`)].map(participant),
 		"Challenge, mission and score counters added in match-v5. The view's playerScore0-9 are match-v4's and stay null."),
-	...omitted(["allInPings", "assistMePings", "basicPings", "commandPings", "dangerPings", "enemyMissingPings",
-		"enemyVisionPings", "getBackPings", "holdPings", "needVisionPings", "onMyWayPings", "pushPings",
-		"retreatPings", "visionClearedPings"].map(participant), "Ping counts, added in match-v5; no legacy field."),
-	...omitted(["PlayerBehavior.**", "wasAfk", "wasSevereTransgressor", "wasPremadeWithSevereTransgressor",
-		"wasPremadeWithIGNBGameEndCauser", "causedGameEndFromIGNBSurrender", "gameEndedInIGNBSurrender",
-		"teamIGNBSurrendered"].map(participant), "Behavior and moderation flags, added in match-v5; no legacy field."),
 	...omitted([participant("selectedRolePreferences")],
 		"The player's queue preferences, not where they played; stats.teamPosition covers that."),
 	...omitted(["baronKills", "dragonKills", "damageDealtToBuildings", "damageDealtToEpicMonsters",
