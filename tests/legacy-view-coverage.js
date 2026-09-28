@@ -124,7 +124,9 @@ const RULES = [
 	// Participants: statistics
 	...SAME_NAME_STATS.map(name => represented(participant(name), `participants[].stats.${name}`)),
 	represented(participant("magicDamageTaken"), "participants[].stats.magicalDamageTaken"),
-	represented(participant("PlayerBehavior.**"), "participants[].stats.PlayerBehavior.**"),
+	// PlayerBehavior's fields are flattened into stats under their own, already prefixed names.
+	represented(participant("PlayerBehavior{}"), "participants[].stats{}"),
+	...omitted([participant("PlayerBehavior")], "An empty or missing PlayerBehavior has no fields to flatten."),
 	represented(participant("lane"), "participants[].timeline.lane"),
 	represented(participant("role"), "participants[].timeline.role"),
 	represented(participant("perks.styles[].selections[].perk"), captures => perkField(captures, "")),

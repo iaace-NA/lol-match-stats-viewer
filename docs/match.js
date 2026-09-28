@@ -781,6 +781,10 @@ class Match {
 		return {
 			participantId: participant.participantId,
 			win: participant.win,
+			// Where the player played, as a match-v5 position name (TOP, JUNGLE, MIDDLE, BOTTOM,
+			// UTILITY), one of each per team. Match-v5 only, and "" off Summoner's Rift. It follows
+			// win because the viewer's stats table lists stats in this order.
+			teamPosition: participant.teamPosition,
 			item0: participant.item0,
 			item1: participant.item1,
 			item2: participant.item2,
@@ -903,12 +907,14 @@ class Match {
 			gameEndedInIGNBSurrender: participant.gameEndedInIGNBSurrender,
 			teamIGNBSurrendered: participant.teamIGNBSurrendered,
 			causedGameEndFromIGNBSurrender: participant.causedGameEndFromIGNBSurrender,
-			// Behavior and moderation flags. PlayerBehavior is an object, passed through as is.
+			// Behavior and moderation flags.
 			wasAfk: participant.wasAfk,
 			wasSevereTransgressor: participant.wasSevereTransgressor,
 			wasPremadeWithSevereTransgressor: participant.wasPremadeWithSevereTransgressor,
 			wasPremadeWithIGNBGameEndCauser: participant.wasPremadeWithIGNBGameEndCauser,
-			PlayerBehavior: participant.PlayerBehavior,
+			// PlayerBehavior's fields, which Riot already prefixes with PlayerBehavior_, flattened
+			// so every stats value stays a scalar as it was in match-v4.
+			...participant.PlayerBehavior,
 			// Ping counts, one per ping type.
 			allInPings: participant.allInPings,
 			assistMePings: participant.assistMePings,
@@ -924,11 +930,8 @@ class Match {
 			pushPings: participant.pushPings,
 			retreatPings: participant.retreatPings,
 			visionClearedPings: participant.visionClearedPings,
-			// Where the player played, as match-v5 position names (TOP, JUNGLE, MIDDLE,
-			// BOTTOM, UTILITY). teamPosition assigns one of each per team and is the most
-			// reliable; individualPosition is Riot's guess for the player alone. Both are
-			// match-v5 only, and empty or "Invalid" off Summoner's Rift.
-			teamPosition: participant.teamPosition,
+			// Riot's guess at where the player alone played, less reliable than teamPosition.
+			// Match-v5 only, and "Invalid" off Summoner's Rift.
 			individualPosition: participant.individualPosition,
 			// The position matchmaking assigned, which the player may not have played.
 			positionAssignedByMatchmaking: participant.positionAssignedByMatchmaking,

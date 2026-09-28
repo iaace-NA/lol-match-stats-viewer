@@ -82,7 +82,21 @@ const STAT_CONFIG = {
 		"totalTimeCCDealt": "Total CC Duration (seconds)",
 		"visionWardsBoughtInGame": "Control Wards Purchased",
 		"sightWardsBoughtInGame": "Sight Wards Purchased",
-		"totalUnitsHealed": "Unique Targets Healed"
+		"totalUnitsHealed": "Unique Targets Healed",
+		"gameEndedInIGNBSurrender": "Game Ended In IGNB Surrender",
+		"teamIGNBSurrendered": "Team IGNB Surrendered",
+		"causedGameEndFromIGNBSurrender": "Caused Game End From IGNB Surrender",
+		"wasPremadeWithIGNBGameEndCauser": "Was Premade With IGNB Game End Causer",
+		"PlayerBehavior_IsHeroInCombat": "Player Behavior: Is Hero In Combat",
+		// Runes in slot order: rune 1 is the keystone, 1 to 4 are the primary tree, 5 and 6 the secondary.
+		"perk0": "Keystone Rune 1", "perk0Var1": "Rune 1 Stat 1", "perk0Var2": "Rune 1 Stat 2", "perk0Var3": "Rune 1 Stat 3",
+		"perk1": "Rune 2", "perk1Var1": "Rune 2 Stat 1", "perk1Var2": "Rune 2 Stat 2", "perk1Var3": "Rune 2 Stat 3",
+		"perk2": "Rune 3", "perk2Var1": "Rune 3 Stat 1", "perk2Var2": "Rune 3 Stat 2", "perk2Var3": "Rune 3 Stat 3",
+		"perk3": "Rune 4", "perk3Var1": "Rune 4 Stat 1", "perk3Var2": "Rune 4 Stat 2", "perk3Var3": "Rune 4 Stat 3",
+		"perk4": "Rune 5", "perk4Var1": "Rune 5 Stat 1", "perk4Var2": "Rune 5 Stat 2", "perk4Var3": "Rune 5 Stat 3",
+		"perk5": "Rune 6", "perk5Var1": "Rune 6 Stat 1", "perk5Var2": "Rune 6 Stat 2", "perk5Var3": "Rune 6 Stat 3",
+		"perkPrimaryStyle": "Primary Rune Tree",
+		"perkSubStyle": "Secondary Rune Tree"
 	},
 
 	// Stats that should be prioritized in dropdowns
